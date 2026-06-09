@@ -70,13 +70,12 @@ async def health():
 async def chat(req: ChatRequest):
     session_id = req.session_id or str(uuid.uuid4())
 
-    try:
-        await session_service.get_session(
-            app_name="letting_copilot",
-            user_id=req.user_id,
-            session_id=session_id,
-        )
-    except Exception:
+    session = await session_service.get_session(
+        app_name="letting_copilot",
+        user_id=req.user_id,
+        session_id=session_id,
+    )
+    if session is None:
         await session_service.create_session(
             app_name="letting_copilot",
             user_id=req.user_id,
