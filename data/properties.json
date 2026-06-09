@@ -1,0 +1,57 @@
+[
+  {
+    "id": "prop_001",
+    "address": "12 Balham High Road, London SW12 9AA",
+    "area": "Balham",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 2100,
+    "available_from": "2026-06-20",
+    "features": ["furnished", "near tube", "garden"],
+    "description": "A bright 2-bed flat 5 minutes from Balham station."
+  },
+  {
+    "id": "prop_002",
+    "address": "45 Tooting Broadway, London SW17 0BW",
+    "area": "Tooting",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "rent_pcm": 1650,
+    "available_from": "2026-07-01",
+    "features": ["part-furnished", "near tube", "new kitchen"],
+    "description": "Modern 1-bed flat moments from Tooting Broadway."
+  },
+  {
+    "id": "prop_003",
+    "address": "8 Clapham Common South Side, London SW4 7AB",
+    "area": "Clapham",
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "rent_pcm": 3200,
+    "available_from": "2026-06-15",
+    "features": ["furnished", "common views", "parking"],
+    "description": "Spacious 3-bed house overlooking Clapham Common."
+  },
+  {
+    "id": "prop_004",
+    "address": "22 Brixton Road, London SW9 6BU",
+    "area": "Brixton",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 1900,
+    "available_from": "2026-07-15",
+    "features": ["unfurnished", "near tube", "high ceilings"],
+    "description": "Period 2-bed flat with high ceilings in central Brixton."
+  },
+  {
+    "id": "prop_005",
+    "address": "31 Streatham Hill, London SW2 4RR",
+    "area": "Streatham",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "rent_pcm": 1400,
+    "available_from": "2026-06-30",
+    "features": ["part-furnished", "quiet street"],
+    "description": "Cosy 1-bed on a quiet residential street in Streatham."
+  }
+]

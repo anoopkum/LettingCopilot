@@ -1,0 +1,49 @@
+name: CI — Test & Docker Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dev deps
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tool unit tests
+        run: pytest tests/test_tools.py -v --tb=short
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_GENAI_USE_VERTEXAI: "false"
+          AVA_MODEL: "gemini-2.0-flash"
+
+  docker-build:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t letting-copilot:ci .
+
+      - name: Smoke test container
+        run: |
+          docker run -d --name ava-test \
+            -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
+            -e GOOGLE_GENAI_USE_VERTEXAI=false \
+            -p 8080:8080 letting-copilot:ci
+          sleep 8
+          curl -sf http://localhost:8080/health
+          docker stop ava-test

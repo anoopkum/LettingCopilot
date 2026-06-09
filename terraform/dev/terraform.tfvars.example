@@ -1,0 +1,3 @@
+project_id = "letting-copilot-dev"
+region     = "us-central1"
+image_tag  = "latest"

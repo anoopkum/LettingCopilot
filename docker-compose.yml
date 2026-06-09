@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  ava:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: letting-copilot:dev
+    container_name: letting-copilot-dev
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=dev
+      - PORT=8080
+    volumes:
+      - ./data:/app/data:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

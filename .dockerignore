@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+.git/
+.github/
+tests/
+terraform/
+*.md
+.DS_Store
