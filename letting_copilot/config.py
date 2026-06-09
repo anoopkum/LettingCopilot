@@ -11,7 +11,7 @@ class Config:
     google_api_key: str = os.getenv("GOOGLE_API_KEY", "")
     use_vertexai: bool = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
 
-    model: str = os.getenv("AVA_MODEL", "gemini-2.0-flash")
+    model: str = os.getenv("AVA_MODEL", "gemini-flash-latest")
     environment: str = os.getenv("ENVIRONMENT", "dev")
     port: int = int(os.getenv("PORT", "8080"))
 

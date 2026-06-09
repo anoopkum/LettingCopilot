@@ -13,9 +13,11 @@ from letting_copilot.config import config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Set ADK to use free-tier API (not Vertex AI)
+# Set ADK to use Gemini API (not Vertex AI)
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
 os.environ["GOOGLE_API_KEY"] = config.google_api_key
+# This key format requires the header style — set both so genai SDK picks it up
+os.environ["GOOGLE_GENAI_API_KEY"] = config.google_api_key
 
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -84,13 +86,20 @@ async def chat(req: ChatRequest):
     content = Content(role="user", parts=[Part(text=req.message)])
     response_text = ""
 
-    async for event in runner.run_async(
-        user_id=req.user_id,
-        session_id=session_id,
-        new_message=content,
-    ):
-        if event.is_final_response() and event.content and event.content.parts:
-            response_text = event.content.parts[0].text
+    try:
+        async for event in runner.run_async(
+            user_id=req.user_id,
+            session_id=session_id,
+            new_message=content,
+        ):
+            if event.is_final_response() and event.content and event.content.parts:
+                response_text = event.content.parts[0].text
+    except Exception as e:
+        err = str(e)
+        logger.error("Agent error: %s", err)
+        if "429" in err or "RESOURCE_EXHAUSTED" in err:
+            raise HTTPException(status_code=429, detail="Gemini API quota exceeded — please try again in a minute or check your API key quota at https://ai.dev/rate-limit")
+        raise HTTPException(status_code=500, detail=f"Agent error: {err[:200]}")
 
     if not response_text:
         raise HTTPException(status_code=500, detail="No response from agent")
