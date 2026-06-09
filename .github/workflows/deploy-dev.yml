@@ -39,9 +39,6 @@ jobs:
     name: Build & Push Image
     runs-on: ubuntu-latest
     needs: test
-    permissions:
-      contents: read
-      id-token: write
     outputs:
       image_tag: ${{ steps.tag.outputs.tag }}
 
@@ -51,8 +48,7 @@ jobs:
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -69,15 +65,12 @@ jobs:
           docker push "${IMAGE}:${{ steps.tag.outputs.tag }}"
           docker push "${IMAGE}:latest"
 
-  # ── Job 3: Terraform dev — Cloud Run deploy with remote GCS state ─────────────
+  # ── Job 3: Terraform — Cloud Run deploy (remote GCS state) ───────────────────
   deploy:
     name: Terraform Deploy (dev)
     runs-on: ubuntu-latest
     needs: build-push
     environment: dev
-    permissions:
-      contents: read
-      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -85,8 +78,9 @@ jobs:
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -96,15 +90,6 @@ jobs:
         working-directory: terraform/dev
         run: terraform init -input=false
 
-      - name: Terraform Plan
-        working-directory: terraform/dev
-        run: |
-          terraform plan -input=false \
-            -var="project_id=${{ env.PROJECT_ID }}" \
-            -var="region=${{ env.REGION }}" \
-            -var="image_tag=${{ needs.build-push.outputs.image_tag }}" \
-            -var="gemini_api_key=${{ secrets.GOOGLE_API_KEY }}"
-
       - name: Terraform Apply
         working-directory: terraform/dev
         run: |
@@ -112,13 +97,14 @@ jobs:
             -var="project_id=${{ env.PROJECT_ID }}" \
             -var="region=${{ env.REGION }}" \
             -var="image_tag=${{ needs.build-push.outputs.image_tag }}" \
-            -var="gemini_api_key=${{ secrets.GOOGLE_API_KEY }}"
+            -var="gemini_api_key=${{ secrets.GEMINI_API_KEY }}"
 
-      - name: Smoke test
+      - name: Smoke test & output URL
+        working-directory: terraform/dev
         run: |
-          URL=$(cd terraform/dev && terraform output -raw service_url)
+          URL=$(terraform output -raw service_url)
           sleep 5
           curl -sf "${URL}/health" | python3 -c \
             "import sys,json; d=json.load(sys.stdin); assert d['status']=='ok', d"
-          echo "Health check passed"
-          echo "### Deployed: ${URL}" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Deployed: ${URL}" >> $GITHUB_STEP_SUMMARY
+          echo "Live URL: ${URL}"
