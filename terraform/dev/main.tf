@@ -1,3 +1,8 @@
+/*
+  Dev environment — Cloud Run + IAM + Secret Manager
+  Remote state stored in GCS (bucket created by bootstrap layer).
+*/
+
 terraform {
   required_version = ">= 1.6"
   required_providers {
@@ -6,6 +11,11 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  backend "gcs" {
+    bucket = "gen-lang-client-0300667287-tfstate"
+    prefix = "letting-copilot/dev"
+  }
 }
 
 provider "google" {
@@ -13,73 +23,81 @@ provider "google" {
   region  = var.region
 }
 
-# Enable required APIs
-resource "google_project_service" "apis" {
-  for_each = toset([
-    "run.googleapis.com",
-    "artifactregistry.googleapis.com",
-    "aiplatform.googleapis.com",
-    "firestore.googleapis.com",
-    "cloudbuild.googleapis.com",
-    "secretmanager.googleapis.com",
-  ])
-  service            = each.key
-  disable_on_destroy = false
+# ── Secret Manager: Gemini API key ────────────────────────────────────────────
+resource "google_secret_manager_secret" "gemini_api_key" {
+  secret_id = "gemini-api-key"
+  replication {
+    auto {}
+  }
 }
 
-# Artifact Registry for Docker images
-resource "google_artifact_registry_repository" "ava" {
-  location      = var.region
-  repository_id = "letting-copilot"
-  format        = "DOCKER"
-  description   = "LettingCopilot container images"
-  depends_on    = [google_project_service.apis]
+resource "google_secret_manager_secret_version" "gemini_api_key" {
+  secret      = google_secret_manager_secret.gemini_api_key.id
+  secret_data = var.gemini_api_key
 }
 
-# Service account for Cloud Run
-resource "google_service_account" "letting_copilot_runner" {
+# ── Service account for Cloud Run ─────────────────────────────────────────────
+resource "google_service_account" "runner" {
   account_id   = "letting-copilot-runner"
-  display_name = "Ava Lettings Cloud Run SA"
+  display_name = "LettingCopilot Cloud Run SA"
 }
 
-resource "google_project_iam_member" "ava_vertex" {
+resource "google_project_iam_member" "runner_secret_accessor" {
   project = var.project_id
-  role    = "roles/aiplatform.user"
-  member  = "serviceAccount:${google_service_account.letting_copilot_runner.email}"
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.runner.email}"
 }
 
-resource "google_project_iam_member" "ava_firestore" {
+resource "google_project_iam_member" "runner_log_writer" {
   project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.letting_copilot_runner.email}"
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.runner.email}"
 }
 
-# Cloud Run service
-resource "google_cloud_run_v2_service" "ava" {
+# ── Cloud Run service ─────────────────────────────────────────────────────────
+resource "google_cloud_run_v2_service" "letting_copilot" {
   name     = "letting-copilot"
   location = var.region
 
   template {
-    service_account = google_service_account.letting_copilot_runner.email
+    service_account = google_service_account.runner.email
 
     containers {
       image = "${var.region}-docker.pkg.dev/${var.project_id}/letting-copilot/letting-copilot:${var.image_tag}"
 
-      env {
-        name  = "GOOGLE_CLOUD_PROJECT"
-        value = var.project_id
+      ports {
+        container_port = 8080
       }
-      env {
-        name  = "GOOGLE_CLOUD_LOCATION"
-        value = var.region
-      }
+
       env {
         name  = "ENVIRONMENT"
         value = "dev"
       }
       env {
         name  = "AVA_MODEL"
-        value = "gemini-2.0-flash-001"
+        value = "gemini-flash-latest"
+      }
+      env {
+        name  = "GOOGLE_GENAI_USE_VERTEXAI"
+        value = "false"
+      }
+      env {
+        name = "GOOGLE_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.gemini_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "GOOGLE_GENAI_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.gemini_api_key.secret_id
+            version = "latest"
+          }
+        }
       }
 
       resources {
@@ -115,23 +133,33 @@ resource "google_cloud_run_v2_service" "ava" {
     }
   }
 
-  depends_on = [google_project_service.apis]
+  depends_on = [
+    google_project_iam_member.runner_secret_accessor,
+    google_secret_manager_secret_version.gemini_api_key,
+  ]
 }
 
-# Allow unauthenticated access for POC/dev
+# ── Public access (POC/dev — no auth) ────────────────────────────────────────
 resource "google_cloud_run_v2_service_iam_member" "public" {
-  project  = google_cloud_run_v2_service.ava.project
-  location = google_cloud_run_v2_service.ava.location
-  name     = google_cloud_run_v2_service.ava.name
+  project  = google_cloud_run_v2_service.letting_copilot.project
+  location = google_cloud_run_v2_service.letting_copilot.location
+  name     = google_cloud_run_v2_service.letting_copilot.name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
 
+# ── Outputs ───────────────────────────────────────────────────────────────────
 output "service_url" {
-  value       = google_cloud_run_v2_service.ava.uri
-  description = "Cloud Run service URL"
+  value       = google_cloud_run_v2_service.letting_copilot.uri
+  description = "Live Cloud Run URL"
 }
 
 output "image_repo" {
-  value = "${var.region}-docker.pkg.dev/${var.project_id}/letting-copilot/letting-copilot"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/letting-copilot/letting-copilot"
+  description = "Artifact Registry image path"
+}
+
+output "service_account" {
+  value       = google_service_account.runner.email
+  description = "Cloud Run service account email"
 }

@@ -1,12 +1,18 @@
-name: CI — Test & Docker Build
+name: CI/CD — Test, Build, Deploy to Cloud Run
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: gen-lang-client-0300667287
+  REGION: us-central1
+  REPO: letting-copilot
+  SERVICE: letting-copilot
 
 jobs:
+  # ── Job 1: Unit tests ────────────────────────────────────────────────────────
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -16,34 +22,103 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
+          cache: pip
 
       - name: Install dev deps
         run: pip install -r requirements-dev.txt
 
-      - name: Run tool unit tests
+      - name: Run tool tests
         run: pytest tests/test_tools.py -v --tb=short
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GOOGLE_GENAI_USE_VERTEXAI: "false"
-          AVA_MODEL: "gemini-2.0-flash"
+          AVA_MODEL: gemini-flash-latest
 
-  docker-build:
-    name: Docker Build Check
+  # ── Job 2: Build & push Docker image ─────────────────────────────────────────
+  build-push:
+    name: Build & Push Image
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t letting-copilot:ci .
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
-      - name: Smoke test container
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - id: tag
+        run: echo "tag=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & push
         run: |
-          docker run -d --name ava-test \
-            -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
-            -e GOOGLE_GENAI_USE_VERTEXAI=false \
-            -p 8080:8080 letting-copilot:ci
-          sleep 8
-          curl -sf http://localhost:8080/health
-          docker stop ava-test
+          IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}
+          docker build -t "${IMAGE}:${{ steps.tag.outputs.tag }}" -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:${{ steps.tag.outputs.tag }}"
+          docker push "${IMAGE}:latest"
+
+  # ── Job 3: Terraform dev — Cloud Run deploy with remote GCS state ─────────────
+  deploy:
+    name: Terraform Deploy (dev)
+    runs-on: ubuntu-latest
+    needs: build-push
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.6"
+
+      - name: Terraform Init (remote GCS backend)
+        working-directory: terraform/dev
+        run: terraform init -input=false
+
+      - name: Terraform Plan
+        working-directory: terraform/dev
+        run: |
+          terraform plan -input=false \
+            -var="project_id=${{ env.PROJECT_ID }}" \
+            -var="region=${{ env.REGION }}" \
+            -var="image_tag=${{ needs.build-push.outputs.image_tag }}" \
+            -var="gemini_api_key=${{ secrets.GOOGLE_API_KEY }}"
+
+      - name: Terraform Apply
+        working-directory: terraform/dev
+        run: |
+          terraform apply -auto-approve -input=false \
+            -var="project_id=${{ env.PROJECT_ID }}" \
+            -var="region=${{ env.REGION }}" \
+            -var="image_tag=${{ needs.build-push.outputs.image_tag }}" \
+            -var="gemini_api_key=${{ secrets.GOOGLE_API_KEY }}"
+
+      - name: Smoke test
+        run: |
+          URL=$(cd terraform/dev && terraform output -raw service_url)
+          sleep 5
+          curl -sf "${URL}/health" | python3 -c \
+            "import sys,json; d=json.load(sys.stdin); assert d['status']=='ok', d"
+          echo "Health check passed"
+          echo "### Deployed: ${URL}" >> $GITHUB_STEP_SUMMARY

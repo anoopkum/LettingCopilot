@@ -1,64 +1,64 @@
 #!/usr/bin/env bash
-# Quick local deploy script for POC — builds, pushes, and deploys to Cloud Run
+# Full deploy: bootstrap (once) → docker build/push → terraform dev apply
 set -euo pipefail
 
-PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-letting-copilot-dev}"
-REGION="${GOOGLE_CLOUD_LOCATION:-us-central1}"
+export PATH="$PATH:/Users/anoo4413/Documents/Learning/GCP/google-cloud-sdk/bin"
+
+PROJECT_ID="gen-lang-client-0300667287"
+REGION="us-central1"
 REPO="letting-copilot"
 SERVICE="letting-copilot"
 TAG="${1:-$(git rev-parse --short HEAD 2>/dev/null || echo latest)}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:${TAG}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-echo "=> Project  : ${PROJECT_ID}"
-echo "=> Region   : ${REGION}"
-echo "=> Image    : ${IMAGE}"
+echo "════════════════════════════════════════"
+echo " LettingCopilot — Deploy"
+echo " Project : ${PROJECT_ID}"
+echo " Region  : ${REGION}"
+echo " Tag     : ${TAG}"
+echo " Image   : ${IMAGE}"
+echo "════════════════════════════════════════"
+
+# ── Step 1: Bootstrap (idempotent — creates GCS bucket + Artifact Registry) ──
 echo ""
-
-# Auth check
-gcloud config set project "${PROJECT_ID}"
-
-# Ensure Artifact Registry repo exists
-gcloud artifacts repositories describe "${REPO}" \
-  --location="${REGION}" &>/dev/null || \
-  gcloud artifacts repositories create "${REPO}" \
-    --repository-format=docker \
-    --location="${REGION}" \
-    --description="LettingCopilot images"
-
-# Configure Docker
-gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-
-# Build and push
-echo "=> Building Docker image..."
-docker build -t "${IMAGE}" .
-docker push "${IMAGE}"
-
-# Deploy Terraform
-echo "=> Applying Terraform (dev)..."
-cd "$(dirname "$0")/../terraform/dev"
-
-if [ ! -f terraform.tfvars ]; then
-  cat > terraform.tfvars <<EOF
-project_id = "${PROJECT_ID}"
-region     = "${REGION}"
-image_tag  = "${TAG}"
-EOF
-else
-  # Update image_tag
-  sed -i.bak "s/image_tag.*/image_tag = \"${TAG}\"/" terraform.tfvars && rm -f terraform.tfvars.bak
-fi
-
-terraform init -upgrade -input=false
+echo "▶ Step 1/4: Bootstrap (GCS state bucket + Artifact Registry)"
+cd "${ROOT}/terraform/bootstrap"
+terraform init -input=false
 terraform apply -auto-approve -input=false
+echo "  Bootstrap complete."
 
-# Get URL
-URL=$(gcloud run services describe "${SERVICE}" \
-  --region="${REGION}" --format='value(status.url)' 2>/dev/null || echo "")
+# ── Step 2: Docker build & push ───────────────────────────────────────────────
+echo ""
+echo "▶ Step 2/4: Docker build & push"
+cd "${ROOT}"
+gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+docker build \
+  -t "${IMAGE}" \
+  -t "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:latest" .
+docker push "${IMAGE}"
+docker push "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:latest"
+echo "  Image pushed: ${IMAGE}"
 
-if [ -n "${URL}" ]; then
-  echo ""
-  echo "=> Deployed! Service URL: ${URL}"
-  echo "=> Health check..."
-  sleep 3
-  curl -sf "${URL}/health" && echo "" || echo "Health check failed — check logs"
-fi
+# ── Step 3: Terraform dev (Cloud Run + IAM + Secrets, remote state on GCS) ───
+echo ""
+echo "▶ Step 3/4: Terraform dev — Cloud Run deploy"
+cd "${ROOT}/terraform/dev"
+terraform init -input=false -reconfigure
+terraform apply -auto-approve -input=false -var="image_tag=${TAG}"
+echo "  Terraform apply complete."
+
+# ── Step 4: Smoke test ────────────────────────────────────────────────────────
+echo ""
+echo "▶ Step 4/4: Smoke test"
+URL=$(terraform output -raw service_url)
+sleep 5
+HEALTH=$(curl -sf "${URL}/health" || echo "FAILED")
+echo "  Health: ${HEALTH}"
+
+echo ""
+echo "════════════════════════════════════════"
+echo " ✓ Deployed!"
+echo " URL: ${URL}"
+echo "════════════════════════════════════════"

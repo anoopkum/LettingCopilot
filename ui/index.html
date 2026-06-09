@@ -97,12 +97,16 @@
         body: JSON.stringify({ message: text, session_id: sessionId }),
       });
       const data = await res.json();
-      sessionId = data.session_id;
       typing.remove();
-      addMsg(data.response || data.detail || 'Sorry, something went wrong.', 'ava');
+      if (!res.ok) {
+        addMsg('⚠️ ' + (data.detail || 'Something went wrong. Please try again.'), 'ava');
+      } else {
+        sessionId = data.session_id;
+        addMsg(data.response || 'Sorry, no response received.', 'ava');
+      }
     } catch (e) {
       typing.remove();
-      addMsg('Connection error — is the server running?', 'ava');
+      addMsg('⚠️ Cannot reach the server. Make sure it is running: python main.py', 'ava');
     }
     btn.disabled = false;
     input.focus();

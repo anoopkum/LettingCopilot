@@ -20,5 +20,7 @@ htmlcov/
 *.tfstate.backup
 .terraform/
 terraform/.terraform/
+terraform/**/*.tfvars
+!terraform/**/*.tfvars.example
 service-account*.json
 credentials*.json
