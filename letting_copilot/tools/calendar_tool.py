@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 _CALENDAR_ID   = os.getenv("GOOGLE_CALENDAR_ID", "")          # e.g. you@gmail.com
 _SA_JSON       = os.getenv("GOOGLE_CALENDAR_SA_JSON", "")     # full JSON string of SA key
 _SLOT_DURATION = int(os.getenv("CALENDAR_SLOT_MINUTES", "60"))
-_SLOT_HOURS    = [10, 13, 15, 17]                              # candidate viewing hours
-_DAYS_AHEAD    = int(os.getenv("CALENDAR_DAYS_AHEAD", "7"))   # how far ahead to look
+_SLOT_HOURS    = [10, 11, 13, 14, 15, 16, 17]                 # candidate viewing hours
+_DAYS_AHEAD    = int(os.getenv("CALENDAR_DAYS_AHEAD", "30"))  # look 30 days ahead
 
 _gcal_service = None  # lazy-init
 _gcal_service_failed = False  # set True after a 403 so we don't retry until restart
@@ -87,21 +87,35 @@ _FAKE_BOOKINGS: dict[str, dict] = {}
 
 # ── Public tool functions (called by ADK agents) ──────────────────────────────
 
-def get_available_slots(date_hint: str | None = None) -> list[dict[str, Any]]:
+def get_available_slots(date_hint: str | None = None) -> dict[str, Any]:
     """
-    Return the next 4 available viewing slots.
+    Return the next available viewing slots.
     Uses Google Calendar freebusy query in production; fake slots in dev.
+    Returns {"slots": [...], "message": "..."} so the LLM knows what to say.
     """
     svc = _get_service()
     if svc is None:
         logger.info("[calendar] using fake slots (GCal not configured)")
-        return [s for s in _FAKE_SLOTS if s["available"]][:4]
+        slots = [s for s in _FAKE_SLOTS if s["available"]][:4]
+    else:
+        try:
+            slots = _gcal_free_slots(svc, date_hint)
+        except Exception as e:
+            logger.error("[calendar] get_available_slots error: %s — falling back", e)
+            slots = _fake_free_slots()
 
-    try:
-        return _gcal_free_slots(svc, date_hint)
-    except Exception as e:
-        logger.error("[calendar] get_available_slots error: %s — falling back", e)
-        return _fake_free_slots()
+    if not slots:
+        return {
+            "slots": [],
+            "available": False,
+            "message": "No viewing slots are available in the next 30 days. "
+                       "Please tell the applicant we will contact them directly to arrange a convenient time.",
+        }
+    return {
+        "slots": slots,
+        "available": True,
+        "message": f"Found {len(slots)} available slots.",
+    }
 
 
 def book_slot(slot_id: str, applicant_name: str, property_id: str) -> dict[str, Any]:
