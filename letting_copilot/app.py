@@ -62,14 +62,21 @@ def _before_model_callback(
     contents = llm_request.contents or []
     logger.info("[ADK] before_model agent=%s messages=%d", agent_name, len(contents))
 
-    # Find the last user-role message to guard
+    # Find the last user-role message to guard (guard safely — contents can be None or malformed)
     last_user_text = ""
-    for content in reversed(contents):
-        if getattr(content, "role", None) == "user":
-            parts = getattr(content, "parts", [])
-            if parts and hasattr(parts[0], "text"):
-                last_user_text = parts[0].text
+    try:
+        for content in reversed(contents):
+            if getattr(content, "role", None) == "user":
+                parts = getattr(content, "parts", None) or []
+                for part in parts:
+                    text = getattr(part, "text", None)
+                    if text:
+                        last_user_text = text
+                        break
+            if last_user_text:
                 break
+    except Exception:
+        pass  # never crash on a guardrail check
 
     if last_user_text:
         result = check_input(last_user_text, agent_name=agent_name)

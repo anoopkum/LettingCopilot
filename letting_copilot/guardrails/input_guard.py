@@ -116,23 +116,24 @@ def check_input(text: str, agent_name: str = "") -> GuardrailResult:
                        "What are you looking for in a rental home?",
         )
 
-    # 6. Agent-specific checks
-    if "qualification" in agent_name:
-        result = _check_qualification_context(stripped)
-        if result:
-            return result
+    # 6. Budget/date checks — apply to any agent context, not just qualification
+    result = _check_qualification_context(stripped)
+    if result:
+        return result
 
     return GuardrailResult(blocked=False, reason="ok", suggestion="")
 
 
 def _check_qualification_context(text: str) -> GuardrailResult | None:
     """
-    When the qualification agent is active, check that budget and date
-    answers look plausible if they seem to be answering those questions.
+    Check budget and date plausibility. Only fires when the message is
+    clearly about stating a budget or move date — not general search queries.
     """
-    # Looks like a budget answer but has no numbers at all
+    # "my budget is loads" / "I can afford that" — budget keyword but no number
+    # Only block if it reads like a direct answer (short, no "looking for" / "around" context)
     budget_keywords = re.search(r"\b(budget|afford|pay|pcm|per month|monthly)\b", text, re.IGNORECASE)
-    if budget_keywords and not re.search(r"\d", text):
+    search_context  = re.search(r"\b(looking|searching|want|need|find|around|about)\b", text, re.IGNORECASE)
+    if budget_keywords and not search_context and not re.search(r"\d", text):
         return GuardrailResult(
             blocked=True,
             reason="budget_no_number",
@@ -140,9 +141,11 @@ def _check_qualification_context(text: str) -> GuardrailResult | None:
                        "What's your approximate monthly budget?",
         )
 
-    # Looks like a budget answer with a very low number (under £500)
+    # Budget stated as under £500 — only trigger when text is SHORT (< 12 words)
+    # and not a search query, to avoid false positives on "around £1,400"
+    words = text.split()
     budget_match = _BUDGET_RE.search(text)
-    if budget_match:
+    if budget_match and len(words) <= 10 and not search_context:
         amount = int(budget_match.group(1))
         if amount < 500:
             return GuardrailResult(

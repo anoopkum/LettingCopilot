@@ -76,29 +76,29 @@ class TestInputGuardrail:
         r = check_input("Hi, I'm interested in renting a flat")
         assert not r.blocked
 
-    def test_qualification_budget_no_number(self):
-        r = check_input("my budget is loads", agent_name="qualification_agent")
+    def test_budget_no_number(self):
+        r = check_input("my budget is loads")
         assert r.blocked
         assert r.reason == "budget_no_number"
         assert "number" in r.suggestion.lower() or "monthly" in r.suggestion.lower()
 
-    def test_qualification_budget_too_low(self):
-        r = check_input("I can spend 300 per month", agent_name="qualification_agent")
+    def test_budget_too_low(self):
+        r = check_input("I can spend 300 per month")
         assert r.blocked
         assert r.reason == "budget_too_low"
         assert "£300" in r.suggestion or "300" in r.suggestion
 
-    def test_qualification_valid_budget_allowed(self):
-        r = check_input("My budget is 1400 per month", agent_name="qualification_agent")
+    def test_valid_budget_allowed(self):
+        r = check_input("My budget is 1400 per month")
         assert not r.blocked
 
-    def test_qualification_move_date_unrecognisable(self):
-        r = check_input("I want to move when things settle down", agent_name="qualification_agent")
+    def test_move_date_unrecognisable(self):
+        r = check_input("I want to move when things settle down")
         assert r.blocked
         assert r.reason == "move_date_unrecognisable"
 
-    def test_qualification_move_date_month_allowed(self):
-        r = check_input("I'm looking to move in September", agent_name="qualification_agent")
+    def test_move_date_month_allowed(self):
+        r = check_input("I'm looking to move in September")
         assert not r.blocked
 
 
