@@ -140,14 +140,14 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
 
       # Google Calendar — only injected when the SA JSON secret exists
       dynamic "env" {
-        for_each = var.google_calendar_sa_json != "" ? [1] : []
+        for_each = var.google_calendar_sa_json != "" ? toset(["enabled"]) : toset([])
         content {
           name  = "GOOGLE_CALENDAR_ID"
           value = var.google_calendar_id
         }
       }
       dynamic "env" {
-        for_each = var.google_calendar_sa_json != "" ? [1] : []
+        for_each = var.google_calendar_sa_json != "" ? toset(["enabled"]) : toset([])
         content {
           name = "GOOGLE_CALENDAR_SA_JSON"
           value_source {
@@ -161,7 +161,7 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
 
       # Google OAuth — only injected when client_id is provided
       dynamic "env" {
-        for_each = var.google_oauth_client_id != "" ? [1] : []
+        for_each = var.google_oauth_client_id != "" ? toset(["enabled"]) : toset([])
         content {
           name  = "GOOGLE_OAUTH_CLIENT_ID"
           value = var.google_oauth_client_id
