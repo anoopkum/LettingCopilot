@@ -49,89 +49,31 @@ from letting_copilot.guardrails import check_input, check_output
 session_service = InMemorySessionService()
 
 
-_ORCHESTRATOR_NAME = "ava_orchestrator"
-
-
 def _before_model_callback(
     callback_context: CallbackContext, llm_request: LlmRequest
 ) -> LlmResponse | None:
-    """
-    ADK before-model callback — runs on orchestrator only.
-    Logs token count, runs input guardrail.
-    Sub-agent calls skip guardrail to avoid double-blocking.
-    """
-    agent_name = callback_context.agent_name
-    contents = llm_request.contents or []
-    logger.info("[ADK] before_model agent=%s messages=%d", agent_name, len(contents))
-
-    # Only run input guardrail for the orchestrator's user-facing turn
-    if agent_name != _ORCHESTRATOR_NAME:
-        return None
-
-    last_user_text = ""
-    try:
-        for content in reversed(contents):
-            if getattr(content, "role", None) == "user":
-                parts = getattr(content, "parts", None) or []
-                for part in (parts or []):
-                    text = getattr(part, "text", None)
-                    if text:
-                        last_user_text = text
-                        break
-            if last_user_text:
-                break
-    except Exception:
-        pass
-
-    if last_user_text:
-        result = check_input(last_user_text, agent_name=agent_name)
-        if result.blocked:
-            logger.info("[guardrail:input] blocked reason=%s", result.reason)
-            return LlmResponse(
-                content=Content(
-                    role="model",
-                    parts=[Part(text=result.suggestion)],
-                )
-            )
-
+    """Log only — guardrails run at the FastAPI endpoint level instead."""
+    logger.info(
+        "[ADK] before_model agent=%s messages=%d",
+        callback_context.agent_name,
+        len(llm_request.contents or []),
+    )
     return None
 
 
 def _after_model_callback(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> LlmResponse | None:
-    """
-    ADK after-model callback — runs on orchestrator only.
-    Logs response preview, runs output guardrail.
-    """
-    agent_name = callback_context.agent_name
-
-    # Only apply output guardrail at the orchestrator level
-    if agent_name != _ORCHESTRATOR_NAME:
-        logger.info("[ADK] after_model sub-agent=%s (passthrough)", agent_name)
-        return None
-
+    """Log only — output guardrail applied at the FastAPI endpoint level."""
     try:
         parts = llm_response.content.parts if llm_response.content else []
-        raw_text = parts[0].text if parts else ""
+        preview = parts[0].text[:80] if parts else ""
     except Exception:
-        return None
-
-    logger.info("[ADK] after_model agent=%s preview=%r", agent_name, raw_text[:80])
-
-    cleaned = check_output(raw_text, agent_name=agent_name)
-    if cleaned != raw_text:
-        return LlmResponse(
-            content=Content(
-                role="model",
-                parts=[Part(text=cleaned)],
-            )
-        )
-
+        preview = ""
+    logger.info("[ADK] after_model agent=%s preview=%r", callback_context.agent_name, preview)
     return None
 
 
-# Wire callbacks — ADK propagates these to sub_agents too, so we gate by agent_name inside
 root_agent.before_model_callback = _before_model_callback
 root_agent.after_model_callback = _after_model_callback
 
