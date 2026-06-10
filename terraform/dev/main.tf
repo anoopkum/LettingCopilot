@@ -36,6 +36,19 @@ resource "google_secret_manager_secret_version" "gemini_api_key" {
   secret_data = var.gemini_api_key
 }
 
+# ── Secret Manager: JWT signing secret ───────────────────────────────────────
+resource "google_secret_manager_secret" "jwt_secret" {
+  secret_id = "jwt-secret"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "jwt_secret" {
+  secret      = google_secret_manager_secret.jwt_secret.id
+  secret_data = var.jwt_secret
+}
+
 # ── Service account for Cloud Run ─────────────────────────────────────────────
 resource "google_service_account" "runner" {
   account_id   = "letting-copilot-runner"
@@ -99,6 +112,15 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
           }
         }
       }
+      env {
+        name = "JWT_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.jwt_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
 
       resources {
         limits = {
@@ -136,6 +158,7 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
   depends_on = [
     google_project_iam_member.runner_secret_accessor,
     google_secret_manager_secret_version.gemini_api_key,
+    google_secret_manager_secret_version.jwt_secret,
   ]
 }
 

@@ -34,13 +34,15 @@ jobs:
           GOOGLE_GENAI_USE_VERTEXAI: "false"
           AVA_MODEL: gemini-flash-latest
 
-  # ── Job 2: Build & push Docker image ─────────────────────────────────────────
+  # ── Job 2: Build & push — semver + sha image tags ────────────────────────────
   build-push:
     name: Build & Push Image
     runs-on: ubuntu-latest
     needs: test
     outputs:
-      image_tag: ${{ steps.tag.outputs.tag }}
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+      semver: ${{ steps.tag.outputs.semver }}
+      sha_short: ${{ steps.tag.outputs.sha_short }}
 
     steps:
       - uses: actions/checkout@v4
@@ -53,19 +55,51 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
 
       - id: tag
-        run: echo "tag=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+        name: Compute image tags
+        run: |
+          SEMVER=$(cat VERSION | tr -d '[:space:]')
+          SHA_SHORT=${GITHUB_SHA::8}
+          # Production tag pattern: v<semver>-<sha>  e.g. v0.1.0-a1b2c3d4
+          IMAGE_TAG="v${SEMVER}-${SHA_SHORT}"
+          echo "semver=${SEMVER}"       >> $GITHUB_OUTPUT
+          echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Image tag: ${IMAGE_TAG}"
 
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      - name: Build & push
+      - name: Build & push with all tags
         run: |
           IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}
-          docker build -t "${IMAGE}:${{ steps.tag.outputs.tag }}" -t "${IMAGE}:latest" .
-          docker push "${IMAGE}:${{ steps.tag.outputs.tag }}"
+          SEMVER=${{ steps.tag.outputs.semver }}
+          SHA=${{ steps.tag.outputs.sha_short }}
+          TAG=${{ steps.tag.outputs.image_tag }}
+
+          docker build \
+            --label "org.opencontainers.image.version=${SEMVER}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label "org.opencontainers.image.source=https://github.com/anoopkum/LettingCopilot" \
+            -t "${IMAGE}:${TAG}" \
+            -t "${IMAGE}:v${SEMVER}" \
+            -t "${IMAGE}:sha-${SHA}" \
+            -t "${IMAGE}:latest" \
+            .
+
+          # Push all tags
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:v${SEMVER}"
+          docker push "${IMAGE}:sha-${SHA}"
           docker push "${IMAGE}:latest"
 
-  # ── Job 3: Terraform — Cloud Run deploy (remote GCS state) ───────────────────
+          echo "### Image tags pushed:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${TAG}\` (production pin)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`v${SEMVER}\` (semver)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sha-${SHA}\` (git sha)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`latest\` (floating)" >> $GITHUB_STEP_SUMMARY
+
+  # ── Job 3: Terraform — Cloud Run deploy ──────────────────────────────────────
   deploy:
     name: Terraform Deploy (dev)
     runs-on: ubuntu-latest
@@ -93,11 +127,13 @@ jobs:
       - name: Terraform Apply
         working-directory: terraform/dev
         run: |
+          # Deploy the pinned semver+sha tag — never deploy :latest to Cloud Run
           terraform apply -auto-approve -input=false \
             -var="project_id=${{ env.PROJECT_ID }}" \
             -var="region=${{ env.REGION }}" \
             -var="image_tag=${{ needs.build-push.outputs.image_tag }}" \
-            -var="gemini_api_key=${{ secrets.GEMINI_API_KEY }}"
+            -var="gemini_api_key=${{ secrets.GEMINI_API_KEY }}" \
+            -var="jwt_secret=${{ secrets.JWT_SECRET }}"
 
       - name: Smoke test & output URL
         working-directory: terraform/dev
@@ -106,5 +142,6 @@ jobs:
           sleep 5
           curl -sf "${URL}/health" | python3 -c \
             "import sys,json; d=json.load(sys.stdin); assert d['status']=='ok', d"
-          echo "### ✅ Deployed: ${URL}" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Deployed ${{ needs.build-push.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Live: ${URL}" >> $GITHUB_STEP_SUMMARY
           echo "Live URL: ${URL}"

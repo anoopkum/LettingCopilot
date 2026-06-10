@@ -20,3 +20,10 @@ variable "gemini_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "jwt_secret" {
+  description = "HS256 JWT signing secret — stored in Secret Manager, never logged"
+  type        = string
+  sensitive   = true
+  default     = "lettingcopilot-dev-secret-change-in-prod"
+}
