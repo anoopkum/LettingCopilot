@@ -40,7 +40,9 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 
 from letting_copilot.agents import root_agent
-from letting_copilot.auth.jwt_handler import create_token, verify_token
+from letting_copilot.auth.jwt_handler import (
+    create_token, verify_token, verify_google_id_token, is_oauth_enabled,
+)
 from letting_copilot.a2a import agent_card, a2a_router
 from letting_copilot.workflow import build_lettings_graph
 from letting_copilot.guardrails import check_input, check_output
@@ -102,11 +104,16 @@ app.add_middleware(
 
 app.include_router(a2a_router)
 
+_EXPIRE = int(os.getenv("JWT_EXPIRE_SECONDS", "86400"))
 
 # ── Models ────────────────────────────────────────────────────────────────────
 class TokenRequest(BaseModel):
     client_id: str
     client_secret: str
+
+
+class GoogleTokenRequest(BaseModel):
+    id_token: str   # Google Sign-In credential from the browser
 
 
 class ChatRequest(BaseModel):
@@ -130,13 +137,16 @@ class WorkflowRequest(BaseModel):
 # ── Public endpoints ──────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
+    features = ["adk", "langgraph", "a2a", "guardrails"]
+    features.append("google-oauth" if is_oauth_enabled() else "jwt-dev")
+    features.append("google-calendar" if os.getenv("GOOGLE_CALENDAR_ID") else "calendar-mock")
     return {
         "status": "ok",
         "version": "0.1.0",
         "environment": config.environment,
         "model": config.model,
         "backend": "google-ai-studio",
-        "features": ["adk", "langgraph", "a2a", "jwt", "guardrails"],
+        "features": features,
     }
 
 
@@ -147,13 +157,69 @@ async def agent_card_endpoint():
 
 @app.post("/auth/token")
 async def issue_token(req: TokenRequest):
+    """
+    Dev-only token endpoint. Disabled when GOOGLE_OAUTH_CLIENT_ID is set —
+    use POST /auth/google instead.
+    """
+    if is_oauth_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail="Google OAuth is enabled. Use POST /auth/google with a Google id_token.",
+        )
     if not req.client_id or not req.client_secret:
         raise HTTPException(status_code=400, detail="client_id and client_secret required")
     token = create_token(
         subject=req.client_id,
         extra={"client_id": req.client_id, "scope": "chat workflow a2a"},
     )
-    return {"access_token": token, "token_type": "bearer", "expires_in": 86400}
+    return {"access_token": token, "token_type": "bearer", "expires_in": _EXPIRE}
+
+
+@app.post("/auth/google")
+async def google_auth(req: GoogleTokenRequest):
+    """
+    Production auth endpoint.
+    Exchange a Google Sign-In id_token for a LettingCopilot JWT.
+
+    Flow:
+      1. UI shows Google Sign-In button (uses GOOGLE_OAUTH_CLIENT_ID)
+      2. User signs in → Google returns an id_token credential
+      3. UI POSTs that credential here
+      4. We verify with Google's public keys, extract email/name
+      5. Issue our own short-lived JWT so all downstream requests are uniform
+    """
+    idinfo = verify_google_id_token(req.id_token)
+    email  = idinfo.get("email", idinfo["sub"])
+    name   = idinfo.get("name", email)
+    token  = create_token(
+        subject=email,
+        extra={
+            "email":   email,
+            "name":    name,
+            "picture": idinfo.get("picture", ""),
+            "scope":   "chat workflow a2a",
+            "auth":    "google",
+        },
+    )
+    logger.info("[auth] Google OAuth sign-in email=%s", email)
+    return {
+        "access_token": token,
+        "token_type":   "bearer",
+        "expires_in":   _EXPIRE,
+        "user": {"email": email, "name": name, "picture": idinfo.get("picture", "")},
+    }
+
+
+@app.get("/auth/config")
+async def auth_config():
+    """
+    UI calls this on load to know which auth method to show.
+    Returns oauth_enabled and the client_id (safe to expose — it's public).
+    """
+    return {
+        "oauth_enabled": is_oauth_enabled(),
+        "google_client_id": os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
+    }
 
 
 # ── Protected endpoints ───────────────────────────────────────────────────────

@@ -49,6 +49,21 @@ resource "google_secret_manager_secret_version" "jwt_secret" {
   secret_data = var.jwt_secret
 }
 
+# ── Secret Manager: Google Calendar service account JSON ─────────────────────
+resource "google_secret_manager_secret" "calendar_sa_json" {
+  count     = var.google_calendar_sa_json != "" ? 1 : 0
+  secret_id = "calendar-sa-json"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "calendar_sa_json" {
+  count       = var.google_calendar_sa_json != "" ? 1 : 0
+  secret      = google_secret_manager_secret.calendar_sa_json[0].id
+  secret_data = var.google_calendar_sa_json
+}
+
 # ── Service account for Cloud Run ─────────────────────────────────────────────
 resource "google_service_account" "runner" {
   account_id   = "letting-copilot-runner"
@@ -123,6 +138,36 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
         }
       }
 
+      # Google Calendar — only injected when the SA JSON secret exists
+      dynamic "env" {
+        for_each = var.google_calendar_sa_json != "" ? [1] : []
+        content {
+          name  = "GOOGLE_CALENDAR_ID"
+          value = var.google_calendar_id
+        }
+      }
+      dynamic "env" {
+        for_each = var.google_calendar_sa_json != "" ? [1] : []
+        content {
+          name = "GOOGLE_CALENDAR_SA_JSON"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.calendar_sa_json[0].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      # Google OAuth — only injected when client_id is provided
+      dynamic "env" {
+        for_each = var.google_oauth_client_id != "" ? [1] : []
+        content {
+          name  = "GOOGLE_OAUTH_CLIENT_ID"
+          value = var.google_oauth_client_id
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -160,6 +205,7 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
     google_project_iam_member.runner_secret_accessor,
     google_secret_manager_secret_version.gemini_api_key,
     google_secret_manager_secret_version.jwt_secret,
+    google_secret_manager_secret_version.calendar_sa_json,
   ]
 }
 

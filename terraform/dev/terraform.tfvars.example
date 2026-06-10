@@ -3,3 +3,10 @@ region         = "us-central1"
 image_tag      = "latest"
 gemini_api_key = "YOUR_GEMINI_API_KEY"
 jwt_secret     = "YOUR_JWT_SECRET_MIN_32_CHARS"
+
+# Optional — leave empty to use in-memory calendar fallback
+google_calendar_id      = ""       # e.g. "you@gmail.com" or dedicated calendar ID
+google_calendar_sa_json = ""       # paste full SA key JSON as single line, or leave empty
+
+# Optional — leave empty to use dev JWT mode (/auth/token)
+google_oauth_client_id  = ""       # e.g. "123456789-abc.apps.googleusercontent.com"

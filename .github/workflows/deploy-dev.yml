@@ -133,7 +133,10 @@ jobs:
             -var="region=${{ env.REGION }}" \
             -var="image_tag=${{ needs.build-push.outputs.image_tag }}" \
             -var="gemini_api_key=${{ secrets.GEMINI_API_KEY }}" \
-            -var="jwt_secret=${{ secrets.JWT_SECRET }}"
+            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
+            -var="google_calendar_id=${{ secrets.GOOGLE_CALENDAR_ID }}" \
+            -var="google_calendar_sa_json=${{ secrets.GOOGLE_CALENDAR_SA_JSON }}" \
+            -var="google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}"
 
       - name: Smoke test & output URL
         working-directory: terraform/dev
