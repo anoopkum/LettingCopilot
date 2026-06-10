@@ -126,17 +126,19 @@ jobs:
 
       - name: Terraform Apply
         working-directory: terraform/dev
+        # JSON secrets (SA key) must go via TF_VAR_* env vars — -var= breaks on special chars
+        env:
+          TF_VAR_gemini_api_key:           ${{ secrets.GEMINI_API_KEY }}
+          TF_VAR_jwt_secret:               ${{ secrets.JWT_SECRET }}
+          TF_VAR_google_calendar_sa_json:  ${{ secrets.GOOGLE_CALENDAR_SA_JSON }}
+          TF_VAR_google_calendar_id:       ${{ secrets.GOOGLE_CALENDAR_ID }}
+          TF_VAR_google_oauth_client_id:   ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
         run: |
           # Deploy the pinned semver+sha tag — never deploy :latest to Cloud Run
           terraform apply -auto-approve -input=false \
             -var="project_id=${{ env.PROJECT_ID }}" \
             -var="region=${{ env.REGION }}" \
-            -var="image_tag=${{ needs.build-push.outputs.image_tag }}" \
-            -var="gemini_api_key=${{ secrets.GEMINI_API_KEY }}" \
-            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
-            -var="google_calendar_id=${{ secrets.GOOGLE_CALENDAR_ID }}" \
-            -var="google_calendar_sa_json=${{ secrets.GOOGLE_CALENDAR_SA_JSON }}" \
-            -var="google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}"
+            -var="image_tag=${{ needs.build-push.outputs.image_tag }}"
 
       - name: Smoke test & output URL
         working-directory: terraform/dev
