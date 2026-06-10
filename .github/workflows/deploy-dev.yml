@@ -27,8 +27,8 @@ jobs:
       - name: Install dev deps
         run: pip install -r requirements-dev.txt
 
-      - name: Run tool tests
-        run: pytest tests/test_tools.py -v --tb=short
+      - name: Run tool + guardrail tests
+        run: pytest tests/test_tools.py tests/test_guardrails.py -v --tb=short
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GOOGLE_GENAI_USE_VERTEXAI: "false"
