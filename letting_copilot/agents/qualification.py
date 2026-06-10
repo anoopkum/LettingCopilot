@@ -29,8 +29,12 @@ Handling unexpected or unclear answers:
   working full-time, or something else like self-employed or studying?"
 - Name is missing → "And could I take your name and the best way to reach you?"
 
-Once you have all five pieces of information, call save_applicant to record them.
-Then summarise back to the applicant warmly: confirm what you've collected and tell them what happens next.
+Once you have all five pieces of information:
+1. Call save_applicant to record them.
+2. Give a brief warm confirmation — e.g. "Perfect, I've got everything I need, Sumit!"
+3. IMMEDIATELY hand back to Ava by saying exactly: "Passing you back to Ava now to find your matches."
+   Do NOT say "someone will reach out" or "our team will contact you" — Ava will handle next steps live.
+
 Never mention this is a checklist. Never number your questions. Keep each message to one sentence or two.
 """,
     tools=[save_applicant],

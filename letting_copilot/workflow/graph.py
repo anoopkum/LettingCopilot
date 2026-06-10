@@ -54,14 +54,15 @@ async def qualify_node(state: LettingsState) -> dict:
     response = await run_adk_agent(qualification_agent, last_msg, state)
 
     qualified = bool(
+        state.get("applicant_name") and
         state.get("budget_pcm") and
         state.get("employment_status") and
-        state.get("move_date")
+        state.get("move_date") and
+        state.get("contact")
     )
-    needs_matching = (
-        qualified and
-        state.get("enquired_property_id") is None
-    )
+    # Always run matching after qualification — even if a specific property was enquired about,
+    # we confirm availability and show alternatives via matching_agent.
+    needs_matching = qualified
 
     return {
         "messages": [AIMessage(content=response)],
