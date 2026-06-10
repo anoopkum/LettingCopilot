@@ -50,8 +50,9 @@ resource "google_secret_manager_secret_version" "jwt_secret" {
 }
 
 # ── Secret Manager: Google Calendar service account JSON ─────────────────────
+# Always created; stores "{}" placeholder when calendar not configured.
+# Python checks for required SA key fields and falls back to mock if not present.
 resource "google_secret_manager_secret" "calendar_sa_json" {
-  count     = var.google_calendar_sa_json != "" ? 1 : 0
   secret_id = "calendar-sa-json"
   replication {
     auto {}
@@ -59,9 +60,8 @@ resource "google_secret_manager_secret" "calendar_sa_json" {
 }
 
 resource "google_secret_manager_secret_version" "calendar_sa_json" {
-  count       = var.google_calendar_sa_json != "" ? 1 : 0
-  secret      = google_secret_manager_secret.calendar_sa_json[0].id
-  secret_data = var.google_calendar_sa_json
+  secret      = google_secret_manager_secret.calendar_sa_json.id
+  secret_data = var.google_calendar_sa_json != "" ? var.google_calendar_sa_json : "{}"
 }
 
 # ── Service account for Cloud Run ─────────────────────────────────────────────
@@ -138,34 +138,24 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
         }
       }
 
-      # Google Calendar — only injected when the SA JSON secret exists
-      dynamic "env" {
-        for_each = var.google_calendar_sa_json != "" ? toset(["enabled"]) : toset([])
-        content {
-          name  = "GOOGLE_CALENDAR_ID"
-          value = var.google_calendar_id
-        }
+      # Google Calendar — empty GOOGLE_CALENDAR_ID triggers mock fallback in Python
+      env {
+        name  = "GOOGLE_CALENDAR_ID"
+        value = var.google_calendar_id
       }
-      dynamic "env" {
-        for_each = var.google_calendar_sa_json != "" ? toset(["enabled"]) : toset([])
-        content {
-          name = "GOOGLE_CALENDAR_SA_JSON"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.calendar_sa_json[0].secret_id
-              version = "latest"
-            }
+      env {
+        name = "GOOGLE_CALENDAR_SA_JSON"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.calendar_sa_json.secret_id
+            version = "latest"
           }
         }
       }
-
-      # Google OAuth — only injected when client_id is provided
-      dynamic "env" {
-        for_each = var.google_oauth_client_id != "" ? toset(["enabled"]) : toset([])
-        content {
-          name  = "GOOGLE_OAUTH_CLIENT_ID"
-          value = var.google_oauth_client_id
-        }
+      # Google OAuth — empty string means dev JWT mode
+      env {
+        name  = "GOOGLE_OAUTH_CLIENT_ID"
+        value = var.google_oauth_client_id
       }
 
       resources {
@@ -205,7 +195,7 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
     google_project_iam_member.runner_secret_accessor,
     google_secret_manager_secret_version.gemini_api_key,
     google_secret_manager_secret_version.jwt_secret,
-    google_secret_manager_secret_version.calendar_sa_json,
+    google_secret_manager_secret_version.calendar_sa_json,  # always exists, may hold "{}" placeholder
   ]
 }
 

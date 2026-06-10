@@ -38,6 +38,10 @@ def _get_service():
         from googleapiclient.discovery import build
 
         info = json.loads(_SA_JSON)
+        # "{}" placeholder stored in Secret Manager when calendar not configured
+        if not info.get("type") or not info.get("private_key"):
+            logger.info("[calendar] SA JSON is placeholder — using mock fallback")
+            return None
         creds = service_account.Credentials.from_service_account_info(
             info,
             scopes=["https://www.googleapis.com/auth/calendar"],
