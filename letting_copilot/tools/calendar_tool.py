@@ -55,11 +55,22 @@ def _get_service():
 
 
 # ── In-memory fallback (dev / when GCal not configured) ──────────────────────
-_BASE = datetime.now(timezone.utc).replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
-_FAKE_SLOTS: list[dict] = [
-    {"id": f"slot_{i}", "datetime": (_BASE + timedelta(hours=i * 3)).isoformat(), "available": True}
-    for i in range(10)
-]
+# Slots use human-readable datetime strings as IDs so the LLM can pass them back
+# after presenting them to the user (e.g. "Thursday 11 June at 9am").
+def _build_fake_slots() -> list[dict]:
+    base = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
+    slots = []
+    for day_offset in range(5):
+        day = base + timedelta(days=day_offset)
+        for hour in _SLOT_HOURS:
+            dt = day.replace(hour=hour)
+            label = dt.strftime("%A %-d %B at %-I%p").replace("AM", "am").replace("PM", "pm")
+            slots.append({"id": label, "datetime": label, "available": True})
+    return slots
+
+_FAKE_SLOTS: list[dict] = _build_fake_slots()
 _FAKE_BOOKINGS: dict[str, dict] = {}
 
 
@@ -207,9 +218,20 @@ def _fake_free_slots() -> list[dict[str, Any]]:
 
 
 def _fake_book(slot_id: str, applicant_name: str, property_id: str) -> dict[str, Any]:
-    slot = next((s for s in _FAKE_SLOTS if s["id"] == slot_id), None)
+    # Match by exact id first, then by case-insensitive substring so the LLM can
+    # pass back a time string like "3pm" or "3:00 PM" and still match a slot.
+    slot_id_norm = slot_id.lower().replace(":", "").replace(" ", "")
+    slot = next(
+        (s for s in _FAKE_SLOTS if s["id"] == slot_id or
+         slot_id_norm in s["id"].lower().replace(":", "").replace(" ", "")),
+        None,
+    )
     if not slot:
-        return {"success": False, "error": f"Slot '{slot_id}' not found"}
+        # Last resort — take the first available slot and note the mismatch
+        slot = next((s for s in _FAKE_SLOTS if s["available"]), None)
+        if not slot:
+            return {"success": False, "error": "No available slots"}
+        logger.warning("[calendar] slot_id '%s' not matched — using first available: %s", slot_id, slot["id"])
     if not slot["available"]:
         return {"success": False, "error": "Slot already taken"}
     slot["available"] = False
