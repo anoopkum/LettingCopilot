@@ -38,8 +38,8 @@ def check_output(text: str, agent_name: str = "") -> str:
     if not text or not text.strip():
         logger.warning("[guardrail:output] empty response from agent=%s", agent_name)
         return (
-            "I'm sorry, I didn't manage to put together a response just now. "
-            "Could you repeat what you said? I'm here to help."
+            "I'm working on it — could you send that again? "
+            "Sometimes I need a moment to catch up between steps."
         )
 
     if len(text.strip()) < 10:

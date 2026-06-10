@@ -269,7 +269,14 @@ async def chat(req: ChatRequest, claims: dict = Depends(verify_token)):
             user_id=user_id, session_id=session_id, new_message=content
         ):
             if event.is_final_response() and event.content and event.content.parts:
-                response_text = event.content.parts[0].text
+                # ADK fires is_final_response() on tool-call turns too — those parts
+                # are function_call/function_response with no .text. Skip them and
+                # keep scanning until we find the actual text response.
+                for part in event.content.parts:
+                    text = getattr(part, "text", None)
+                    if text:
+                        response_text = text
+                        break
                 if hasattr(event, "author"):
                     responding_agent = event.author
     except Exception as e:
@@ -279,10 +286,8 @@ async def chat(req: ChatRequest, claims: dict = Depends(verify_token)):
             raise HTTPException(status_code=429, detail="Gemini API quota exceeded — please try again shortly.")
         raise HTTPException(status_code=500, detail=f"Agent error: {err[:200]}")
 
-    if not response_text:
-        raise HTTPException(status_code=500, detail="No response from agent")
-
-    # Final output guard (belt-and-braces — ADK callback should already have cleaned it)
+    # Run output guard — also handles empty response with a friendly fallback
+    # (don't raise 500 here; a blank turn from ADK tool-chaining is recoverable)
     response_text = check_output(response_text, agent_name=responding_agent)
 
     return ChatResponse(
