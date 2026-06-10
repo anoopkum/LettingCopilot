@@ -41,9 +41,21 @@ class TestCalendar:
         assert result["success"] is True
         assert result["applicant"] == "Tom Smith"
 
-    def test_book_slot_missing(self):
-        result = book_slot("nonexistent_slot", "Jane Doe", "prop_001")
+    def test_book_slot_fuzzy_match(self):
+        # Fuzzy match: passing a time string should match a slot and succeed
+        result = book_slot("10am", "Jane Doe", "prop_001")
+        assert result["success"] is True
+
+    def test_book_slot_no_slots_left(self):
+        # Book all available slots, then verify next booking fails gracefully
+        from letting_copilot.tools.calendar_tool import _FAKE_SLOTS
+        for s in _FAKE_SLOTS:
+            s["available"] = False
+        result = book_slot("10am", "Jane Doe", "prop_001")
         assert result["success"] is False
+        # Restore for other tests
+        for s in _FAKE_SLOTS:
+            s["available"] = True
 
 
 class TestCRM:
