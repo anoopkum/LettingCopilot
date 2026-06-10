@@ -249,9 +249,9 @@ async def workflow_endpoint(req: WorkflowRequest, claims: dict = Depends(verify_
 
 @app.get("/properties")
 async def list_properties(claims: dict = Depends(verify_token)):
-    from letting_copilot.tools.property_store import _load, _PROPERTIES
-    _load()
-    return _PROPERTIES
+    import letting_copilot.tools.property_store as ps
+    ps._load()
+    return ps._PROPERTIES
 
 
 # ── UI (public) ───────────────────────────────────────────────────────────────

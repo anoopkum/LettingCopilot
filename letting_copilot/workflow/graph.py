@@ -118,21 +118,20 @@ async def followup_node(state: LettingsState) -> dict:
 
 # ── Conditional edge functions ────────────────────────────────────────────────
 def route_after_qualify(state: LettingsState) -> str:
-    if not state.get("qualified"):
-        return "qualify"            # keep qualifying
+    """Single-turn mode: qualify once then stop. Multi-turn chaining via /chat."""
     if state.get("needs_matching"):
-        return "match"              # find a property first
-    return "book"                   # go straight to booking
+        return "match"
+    return END
+
+
+def route_after_match(state: LettingsState) -> str:
+    return "book"
 
 
 def route_after_book(state: LettingsState) -> str:
     if not state.get("viewing_booked"):
-        return "book"               # retry booking
+        return END          # booking needs more info — return to caller
     return "followup"
-
-
-def route_after_followup(state: LettingsState) -> str:
-    return END
 
 
 # ── Graph builder ─────────────────────────────────────────────────────────────
@@ -149,18 +148,18 @@ def build_lettings_graph() -> StateGraph:
     g.add_conditional_edges(
         "qualify",
         route_after_qualify,
-        {"qualify": "qualify", "match": "match", "book": "book"},
+        {"match": "match", END: END},
     )
-    g.add_edge("match", "book")
+    g.add_conditional_edges(
+        "match",
+        route_after_match,
+        {"book": "book"},
+    )
     g.add_conditional_edges(
         "book",
         route_after_book,
-        {"book": "book", "followup": "followup"},
+        {"followup": "followup", END: END},
     )
-    g.add_conditional_edges(
-        "followup",
-        route_after_followup,
-        {END: END},
-    )
+    g.add_edge("followup", END)
 
     return g.compile()

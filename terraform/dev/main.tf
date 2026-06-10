@@ -74,6 +74,7 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
 
   template {
     service_account = google_service_account.runner.email
+    timeout         = "300s"
 
     containers {
       image = "${var.region}-docker.pkg.dev/${var.project_id}/letting-copilot/letting-copilot:${var.image_tag}"
