@@ -1,16 +1,10 @@
 """Orchestrator agent — entry point for all lettings enquiries."""
 from google.adk.agents import Agent
-from google.adk.tools import AgentTool
 from letting_copilot.config import config
 from .qualification import qualification_agent
 from .matching import matching_agent
 from .booking import booking_agent
 from .followup import followup_agent
-
-qualify_tool  = AgentTool(agent=qualification_agent)
-match_tool    = AgentTool(agent=matching_agent)
-book_tool     = AgentTool(agent=booking_agent)
-followup_tool = AgentTool(agent=followup_agent)
 
 root_agent = Agent(
     name="ava_orchestrator",
@@ -27,10 +21,10 @@ Your personality:
 
 Your job:
 1. Welcome the applicant and find out what they're looking for (area, bedrooms, budget).
-2. Call `qualification_agent` to gather their details naturally.
-3. If their budget doesn't match the property, call `matching_agent` to find alternatives.
-4. Once a property is confirmed, call `booking_agent` to arrange a viewing.
-5. After booking, call `followup_agent` for reminders and feedback.
+2. Hand off to `qualification_agent` to gather their details naturally.
+3. If their budget doesn't match the property, hand off to `matching_agent` to find alternatives.
+4. Once a property is confirmed, hand off to `booking_agent` to arrange a viewing.
+5. After booking, hand off to `followup_agent` for reminders and feedback.
 
 Handling unclear or unexpected input:
 - If the user asks something off-topic (weather, cooking, etc.) — politely redirect:
@@ -43,5 +37,5 @@ Handling unclear or unexpected input:
 
 Always be brief. One clear message at a time.
 """,
-    tools=[qualify_tool, match_tool, book_tool, followup_tool],
+    sub_agents=[qualification_agent, matching_agent, booking_agent, followup_agent],
 )
