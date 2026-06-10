@@ -49,26 +49,31 @@ from letting_copilot.guardrails import check_input, check_output
 session_service = InMemorySessionService()
 
 
+_ORCHESTRATOR_NAME = "ava_orchestrator"
+
+
 def _before_model_callback(
     callback_context: CallbackContext, llm_request: LlmRequest
 ) -> LlmResponse | None:
     """
-    ADK before-model callback.
-    1. Logs agent name + message count.
-    2. Runs input guardrail on the last user message.
-       If blocked, returns a synthetic LlmResponse so the LLM is never called.
+    ADK before-model callback — runs on orchestrator only.
+    Logs token count, runs input guardrail.
+    Sub-agent calls skip guardrail to avoid double-blocking.
     """
     agent_name = callback_context.agent_name
     contents = llm_request.contents or []
     logger.info("[ADK] before_model agent=%s messages=%d", agent_name, len(contents))
 
-    # Find the last user-role message to guard (guard safely — contents can be None or malformed)
+    # Only run input guardrail for the orchestrator's user-facing turn
+    if agent_name != _ORCHESTRATOR_NAME:
+        return None
+
     last_user_text = ""
     try:
         for content in reversed(contents):
             if getattr(content, "role", None) == "user":
                 parts = getattr(content, "parts", None) or []
-                for part in parts:
+                for part in (parts or []):
                     text = getattr(part, "text", None)
                     if text:
                         last_user_text = text
@@ -76,16 +81,12 @@ def _before_model_callback(
             if last_user_text:
                 break
     except Exception:
-        pass  # never crash on a guardrail check
+        pass
 
     if last_user_text:
         result = check_input(last_user_text, agent_name=agent_name)
         if result.blocked:
-            logger.info(
-                "[guardrail:input] blocked agent=%s reason=%s",
-                agent_name, result.reason,
-            )
-            # Return a synthetic LlmResponse — ADK will use this instead of calling Gemini
+            logger.info("[guardrail:input] blocked reason=%s", result.reason)
             return LlmResponse(
                 content=Content(
                     role="model",
@@ -93,21 +94,28 @@ def _before_model_callback(
                 )
             )
 
-    return None  # proceed normally
+    return None
 
 
 def _after_model_callback(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> LlmResponse | None:
     """
-    ADK after-model callback.
-    1. Logs response preview.
-    2. Runs output guardrail — redacts secrets, error bleeds, empty responses.
-       If the output is modified, returns a new LlmResponse.
+    ADK after-model callback — runs on orchestrator only.
+    Logs response preview, runs output guardrail.
     """
     agent_name = callback_context.agent_name
-    parts = llm_response.content.parts if llm_response.content else []
-    raw_text = parts[0].text if parts else ""
+
+    # Only apply output guardrail at the orchestrator level
+    if agent_name != _ORCHESTRATOR_NAME:
+        logger.info("[ADK] after_model sub-agent=%s (passthrough)", agent_name)
+        return None
+
+    try:
+        parts = llm_response.content.parts if llm_response.content else []
+        raw_text = parts[0].text if parts else ""
+    except Exception:
+        return None
 
     logger.info("[ADK] after_model agent=%s preview=%r", agent_name, raw_text[:80])
 
@@ -120,10 +128,10 @@ def _after_model_callback(
             )
         )
 
-    return None  # use original response
+    return None
 
 
-# Wire callbacks into root agent (applies to orchestrator + all sub-agents via ADK)
+# Wire callbacks — ADK propagates these to sub_agents too, so we gate by agent_name inside
 root_agent.before_model_callback = _before_model_callback
 root_agent.after_model_callback = _after_model_callback
 
