@@ -133,4 +133,55 @@ lsof -ti:8080 | xargs kill -9
 | In-memory property store | Data resets on restart | Replace with Firestore / Cloud SQL |
 | In-memory CRM | Applicant records lost on restart | Replace with Cloud SQL or CRM API |
 | Notifications log only | No real SMS/email sent | Integrate Twilio / SendGrid |
-| No auth on `/chat` | Anyone can call the API | Add API key or OAuth middleware |
+| No auth on `/chat` | Anyone can call the API | ✅ Fixed — JWT bearer auth added |
+
+---
+
+## 9. `/properties` returns empty list `[]`
+
+**When:** Calling `GET /properties` after the deep architecture commit.
+
+**Root cause:** `app.py` did `from letting_copilot.tools.property_store import _load, _PROPERTIES`. This copies the reference to the list object at import time. When `_load()` later does `_PROPERTIES = json.loads(...)`, it rebinds the module-level name to a new list — but the imported name in `app.py` still points to the original empty list.
+
+**Fix:** Import the module itself and access the attribute through it:
+```python
+# Before (broken)
+from letting_copilot.tools.property_store import _load, _PROPERTIES
+_load()
+return _PROPERTIES   # always []
+
+# After (correct)
+import letting_copilot.tools.property_store as ps
+ps._load()
+return ps._PROPERTIES  # reads the current module attribute
+```
+
+**File:** `letting_copilot/app.py`
+
+---
+
+## 10. `/workflow` times out (60s) on Cloud Run
+
+**When:** Calling `POST /workflow` with the LangGraph pipeline.
+
+**Root cause:** The graph was set up to loop through all 4 nodes (qualify → match → book → followup) in a single request. Each node calls an ADK agent which makes a Gemini API call (~10–15s on free tier). 4 sequential calls = ~60s, which hit Cloud Run's default 60s request timeout.
+
+**Fix 1:** Raised Cloud Run `timeout` to `300s` in `terraform/dev/main.tf`.
+
+**Fix 2:** Changed graph routing to single-turn mode — qualify node always returns to END on the first pass unless `needs_matching=True`. Each turn returns to the caller; the UI/orchestrator drives the next step via `/chat` or subsequent `/workflow` calls.
+
+**File:** `letting_copilot/workflow/graph.py`, `terraform/dev/main.tf`
+
+---
+
+## 11. GitHub push protection blocked API key in `.tfvars.example`
+
+**When:** Pushing a commit that included a real API key in `terraform/dev/terraform.tfvars.example`.
+
+**Root cause:** GitHub Secret Scanning detected the `AQ.Ab8RN6LII9...` key pattern in the example file and blocked the push.
+
+**Fix:** Replaced the real key with the placeholder `YOUR_GEMINI_API_KEY` in the example file, then force-pushed with `--force-with-lease`.
+
+**File:** `terraform/dev/terraform.tfvars.example`
+
+**Lesson:** Always use placeholder values in `.example` files, even if the real file is gitignored.
