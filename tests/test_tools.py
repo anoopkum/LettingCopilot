@@ -41,17 +41,25 @@ class TestCalendar:
         assert result["success"] is True
         assert result["applicant"] == "Tom Smith"
 
-    def test_book_slot_fuzzy_match(self):
-        # Fuzzy match: passing a time string should match a slot and succeed
-        result = book_slot("10am", "Jane Doe", "prop_001")
+    def test_book_slot_by_real_id(self):
+        # Book using the actual slot id from get_available_slots
+        slots = get_available_slots()
+        assert slots, "no slots returned"
+        slot_id = slots[0]["id"]
+        result = book_slot(slot_id, "Jane Doe", "prop_001")
+        assert result["success"] is True
+        assert result["booking_id"].startswith("booking_")
+
+    def test_book_slot_fuzzy_time_match(self):
+        # Fuzzy match: a plain time string should fall back to first available slot
+        result = book_slot("3pm", "Jane Doe", "prop_001")
         assert result["success"] is True
 
     def test_book_slot_no_slots_left(self):
-        # Book all available slots, then verify next booking fails gracefully
         from letting_copilot.tools.calendar_tool import _FAKE_SLOTS
         for s in _FAKE_SLOTS:
             s["available"] = False
-        result = book_slot("10am", "Jane Doe", "prop_001")
+        result = book_slot("anytime", "Jane Doe", "prop_001")
         assert result["success"] is False
         # Restore for other tests
         for s in _FAKE_SLOTS:

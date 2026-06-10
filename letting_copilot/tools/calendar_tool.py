@@ -24,13 +24,23 @@ _SLOT_HOURS    = [10, 13, 15, 17]                              # candidate viewi
 _DAYS_AHEAD    = int(os.getenv("CALENDAR_DAYS_AHEAD", "7"))   # how far ahead to look
 
 _gcal_service = None  # lazy-init
+_gcal_service_failed = False  # set True after a 403 so we don't retry until restart
+
+
+def reset_service_cache():
+    """Force re-initialisation of the GCal service (e.g. after enabling the API)."""
+    global _gcal_service, _gcal_service_failed
+    _gcal_service = None
+    _gcal_service_failed = False
 
 
 def _get_service():
     """Return authenticated Google Calendar service, or None if not configured."""
-    global _gcal_service
+    global _gcal_service, _gcal_service_failed
     if _gcal_service is not None:
         return _gcal_service
+    if _gcal_service_failed:
+        return None
     if not _CALENDAR_ID or not _SA_JSON:
         return None
     try:
@@ -51,6 +61,7 @@ def _get_service():
         return _gcal_service
     except Exception as e:
         logger.error("[calendar] failed to initialise Google Calendar API: %s", e)
+        _gcal_service_failed = True  # stop retrying until next restart
         return None
 
 
