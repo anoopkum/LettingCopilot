@@ -133,6 +133,8 @@ jobs:
           TF_VAR_google_calendar_sa_json:  ${{ secrets.GOOGLE_CALENDAR_SA_JSON }}
           TF_VAR_google_calendar_id:       ${{ secrets.GOOGLE_CALENDAR_ID }}
           TF_VAR_google_oauth_client_id:   ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          TF_VAR_sendgrid_api_key:         ${{ secrets.SENDGRID_API_KEY }}
+          TF_VAR_sendgrid_from_email:      ${{ secrets.SENDGRID_FROM_EMAIL }}
         run: |
           # Deploy the pinned semver+sha tag — never deploy :latest to Cloud Run
           terraform apply -auto-approve -input=false \

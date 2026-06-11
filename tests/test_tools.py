@@ -91,10 +91,19 @@ class TestCRM:
 
 
 class TestNotifications:
-    def test_send_reminder(self):
+    def test_send_reminder_no_email(self):
+        # No email address + no SendGrid key → sent=False, channel=log, still returns message
         result = send_reminder("Tom", "Thursday 2pm", "12 Balham High Road")
-        assert result["sent"] is True
+        assert result["message"] != ""
+        assert result["channel"] == "log"
+
+    def test_send_reminder_with_email_no_key(self):
+        # Email address given but no SendGrid key → graceful fallback to log
+        result = send_reminder("Tom", "Thursday 2pm", "12 Balham High Road", "tom@example.com")
+        assert result["to"] == "tom@example.com"
+        assert result["channel"] == "log"  # SendGrid not configured in test env
 
     def test_send_followup(self):
         result = send_followup("Tom", "12 Balham High Road")
-        assert result["sent"] is True
+        assert result["message"] != ""
+        assert "channel" in result

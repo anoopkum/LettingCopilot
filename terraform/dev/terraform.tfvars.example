@@ -10,3 +10,7 @@ google_calendar_sa_json = ""       # paste full SA key JSON as single line, or l
 
 # Optional — leave empty to use dev JWT mode (/auth/token)
 google_oauth_client_id  = ""       # e.g. "123456789-abc.apps.googleusercontent.com"
+
+# Optional — leave empty to log-only (no real emails sent)
+sendgrid_api_key        = ""       # from app.sendgrid.com → Settings → API Keys
+sendgrid_from_email     = ""       # e.g. "ava@yourdomain.com" — must be verified in SendGrid

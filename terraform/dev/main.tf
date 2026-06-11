@@ -49,6 +49,17 @@ resource "google_secret_manager_secret_version" "jwt_secret" {
   secret_data = var.jwt_secret
 }
 
+# ── Secret Manager: SendGrid API key ─────────────────────────────────────────
+resource "google_secret_manager_secret" "sendgrid_api_key" {
+  secret_id = "sendgrid-api-key"
+  replication { auto {} }
+}
+
+resource "google_secret_manager_secret_version" "sendgrid_api_key" {
+  secret      = google_secret_manager_secret.sendgrid_api_key.id
+  secret_data = var.sendgrid_api_key != "" ? var.sendgrid_api_key : "not-configured"
+}
+
 # ── Secret Manager: Google Calendar service account JSON ─────────────────────
 # Always created; stores "{}" placeholder when calendar not configured.
 # Python checks for required SA key fields and falls back to mock if not present.
@@ -158,6 +169,21 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
         value = var.google_oauth_client_id
       }
 
+      # SendGrid email notifications
+      env {
+        name = "SENDGRID_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.sendgrid_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "SENDGRID_FROM_EMAIL"
+        value = var.sendgrid_from_email
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -195,7 +221,8 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
     google_project_iam_member.runner_secret_accessor,
     google_secret_manager_secret_version.gemini_api_key,
     google_secret_manager_secret_version.jwt_secret,
-    google_secret_manager_secret_version.calendar_sa_json,  # always exists, may hold "{}" placeholder
+    google_secret_manager_secret_version.calendar_sa_json,
+    google_secret_manager_secret_version.sendgrid_api_key,
   ]
 }
 

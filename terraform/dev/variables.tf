@@ -48,3 +48,17 @@ variable "google_oauth_client_id" {
   sensitive   = false
   default     = ""
 }
+
+variable "sendgrid_api_key" {
+  description = "SendGrid API key for sending confirmation and follow-up emails"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "sendgrid_from_email" {
+  description = "Verified sender email address in SendGrid"
+  type        = string
+  sensitive   = false
+  default     = ""
+}
