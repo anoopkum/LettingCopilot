@@ -69,6 +69,9 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build & push with all tags
         run: |
           IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}
@@ -76,7 +79,9 @@ jobs:
           SHA=${{ steps.tag.outputs.sha_short }}
           TAG=${{ steps.tag.outputs.image_tag }}
 
-          docker build \
+          docker buildx build \
+            --cache-from type=gha \
+            --cache-to   type=gha,mode=max \
             --label "org.opencontainers.image.version=${SEMVER}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -85,13 +90,10 @@ jobs:
             -t "${IMAGE}:v${SEMVER}" \
             -t "${IMAGE}:sha-${SHA}" \
             -t "${IMAGE}:latest" \
+            --push \
             .
 
-          # Push all tags
-          docker push "${IMAGE}:${TAG}"
-          docker push "${IMAGE}:v${SEMVER}"
-          docker push "${IMAGE}:sha-${SHA}"
-          docker push "${IMAGE}:latest"
+          # Tags were pushed inline by --push above
 
           echo "### Image tags pushed:" >> $GITHUB_STEP_SUMMARY
           echo "- \`${TAG}\` (production pin)" >> $GITHUB_STEP_SUMMARY
