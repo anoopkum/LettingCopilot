@@ -52,7 +52,9 @@ resource "google_secret_manager_secret_version" "jwt_secret" {
 # ── Secret Manager: SendGrid API key ─────────────────────────────────────────
 resource "google_secret_manager_secret" "sendgrid_api_key" {
   secret_id = "sendgrid-api-key"
-  replication { auto {} }
+  replication {
+    auto {}
+  }
 }
 
 resource "google_secret_manager_secret_version" "sendgrid_api_key" {
