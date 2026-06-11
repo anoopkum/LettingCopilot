@@ -1,301 +1,231 @@
 # LettingCopilot
 
-AI-powered lettings agent that handles the full rental journey — from first enquiry to confirmed viewing — without any manual handoffs. Built on Google ADK 2.2.0 + Gemini Flash, deployed on GCP Cloud Run via Terraform with GitHub Actions CI/CD.
+An AI lettings agent that guides renters from first enquiry to confirmed viewing — entirely through conversation. No forms, no buttons, no handoffs.
 
-**Live:** `https://letting-copilot-913660829167.us-central1.run.app`
-
----
-
-## What It Does
-
-A prospective tenant opens the chat and Ava (the AI agent) runs the entire pipeline automatically in one continuous conversation:
-
-```
-Sign In → Qualify → Match → Book → Confirm
-```
-
-No buttons, no forms, no manual handoffs between stages.
+**Live demo:** https://letting-copilot-913660829167.us-central1.run.app
 
 ---
 
-## User Journey
+## How It Works
 
-### 1. Sign In
-The user visits the app and signs in with Google. Google Sign-In (GIS) returns an `id_token` credential which is exchanged at `/auth/google` for a short-lived JWT. All subsequent requests use that JWT.
+A renter opens the chat and talks to **Ava**, the AI agent. Ava handles everything:
 
-### 2. Qualify
-Ava collects five details conversationally, one at a time:
+```
+Qualify  →  Match  →  Book  →  Confirm
+```
 
-- Preferred move date
-- Monthly budget (PCM)
-- Employment status
-- Guarantor availability (if not full-time employed)
-- Full name and contact email
+Each stage runs automatically — Ava never waits for a human to trigger the next step.
 
-Ava validates inline — an unrecognisable date or a budget typed as words triggers a gentle re-ask, not an error. Short replies like "no", "yes", "ok" pass through normally.
+---
 
-### 3. Match
-As soon as all five details are collected, Ava saves the applicant to the CRM and immediately calls `search_properties` without waiting for a prompt. Pinecone returns semantically ranked properties filtered by budget and bedroom count. Ava presents up to three options conversationally.
+## The Conversation Flow
 
-### 4. Book
-Once the applicant picks a property, Ava immediately calls `get_available_slots`. If real Google Calendar slots are available she offers two or three choices. The applicant picks one, Ava calls `book_slot` and a calendar event is created on the agency calendar.
-
-### 5. Confirm
-Ava calls `send_reminder` with the applicant's email address. SendGrid sends an HTML confirmation email with the property address, date and time. If the send fails, Ava says so honestly — it never claims to have sent an email unless `sent=True` is returned.
+```
+Renter: "Hi, I'm looking for a flat in South London"
+                        ↓
+        ┌───────────────────────────────┐
+        │  QUALIFY                      │
+        │  Ava collects 5 things:       │
+        │  • Move date                  │
+        │  • Monthly budget             │
+        │  • Employment status          │
+        │  • Guarantor (if needed)      │
+        │  • Name + email               │
+        └──────────────┬────────────────┘
+                       ↓  (all 5 collected → automatic)
+        ┌───────────────────────────────┐
+        │  MATCH                        │
+        │  Searches properties by:      │
+        │  • Budget (hard filter)       │
+        │  • Bedrooms (hard filter)     │
+        │  • Natural language ranking   │
+        │    via Pinecone vector search │
+        │  Presents up to 3 options     │
+        └──────────────┬────────────────┘
+                       ↓  (renter picks one → automatic)
+        ┌───────────────────────────────┐
+        │  BOOK                         │
+        │  Checks real Google Calendar  │
+        │  availability, offers 2–3     │
+        │  slots, renter picks one,     │
+        │  creates calendar event       │
+        └──────────────┬────────────────┘
+                       ↓  (booking confirmed → automatic)
+        ┌───────────────────────────────┐
+        │  CONFIRM                      │
+        │  Sends HTML email via         │
+        │  SendGrid with property +     │
+        │  viewing details              │
+        └───────────────────────────────┘
+```
 
 ---
 
 ## Architecture
 
 ```
-Browser
-  │  Google Sign-In (GIS + One Tap)
-  ▼
-FastAPI (port 8080)
-  ├── /auth/google  ──── verify id_token ──── issue JWT
-  ├── /auth/config  ──── tells UI which auth mode is active
-  ├── /health       ──── active features list
-  │
-  │  JWT (Bearer)
-  ▼
-┌──────────────────────────────────────────────────────┐
-│               ADK Orchestrator                       │
-│               ava_orchestrator (Gemini Flash)        │
-│                                                      │
-│  All 7 tools live directly on root_agent             │
-│  (no sub-agents — sub-agents end the turn early)     │
-│                                                      │
-│  ┌─────────────────┐   ┌──────────────────────────┐  │
-│  │  save_applicant │   │    search_properties     │  │
-│  │     (CRM)       │   │  Pinecone semantic search│  │
-│  └─────────────────┘   └──────────────────────────┘  │
-│  ┌─────────────────┐   ┌──────────────────────────┐  │
-│  │get_available_   │   │       book_slot          │  │
-│  │    slots        │   │   Google Calendar API    │  │
-│  │ Google Calendar │   └──────────────────────────┘  │
-│  └─────────────────┘                                 │
-│  ┌─────────────────┐   ┌──────────────────────────┐  │
-│  │  send_reminder  │   │      send_followup       │  │
-│  │   SendGrid      │   │       SendGrid           │  │
-│  └─────────────────┘   └──────────────────────────┘  │
-│  ┌─────────────────┐                                 │
-│  │   save_offer    │                                 │
-│  │     (CRM)       │                                 │
-│  └─────────────────┘                                 │
-└──────────────────────────────────────────────────────┘
-         │            │             │
-     Pinecone    Google Calendar  SendGrid
-   (vector search)  (real slots)  (emails)
+                    ┌─────────────────┐
+                    │   Browser UI    │
+                    │  (index.html)   │
+                    └────────┬────────┘
+                             │ Google Sign-In
+                             ▼
+                    ┌─────────────────┐
+                    │    FastAPI      │◄── /health
+                    │   (app.py)      │◄── /auth/google
+                    └────────┬────────┘◄── /chat
+                             │ JWT verified
+                             ▼
+               ┌─────────────────────────────┐
+               │     Input Guardrails        │
+               │  blocks injection, gibberish│
+               │  off-topic, empty messages  │
+               └──────────────┬──────────────┘
+                              │ clean input
+                              ▼
+               ┌─────────────────────────────┐
+               │      Ava (root_agent)       │
+               │   Google ADK 2.2 + Gemini   │
+               │                             │
+               │  All tools run directly     │
+               │  on the agent — no          │
+               │  sub-agents (see note)      │
+               └──┬──────┬──────┬──────┬─────┘
+                  │      │      │      │
+           ┌──────┘  ┌───┘  ┌───┘  ┌──┘
+           ▼         ▼      ▼      ▼
+        CRM      Pinecone  Google  SendGrid
+     (applicant  (property  Calendar (email
+      records)    search)   (slots +  confirm)
+                            booking)
+                              │
+               ┌──────────────┴──────────────┐
+               │      Output Guardrails       │
+               │  redacts secrets/tracebacks  │
+               │  handles empty LLM responses │
+               └─────────────────────────────┘
 ```
 
-### Guardrails
+> **Why no sub-agents?** In ADK 2.2, delegating to a sub-agent ends the conversation turn. The pipeline would stop after qualification and wait for the user to send another message. All tools live directly on `root_agent` so the full qualify → match → book → confirm flow runs in one continuous turn.
 
-**Input guard** (runs before the LLM, at FastAPI layer):
-- Blocks empty input, pure symbols, prompt injection, off-topic domains (crypto, recipes, weather)
-- Validates budget numbers and date hints when the message looks like a direct answer
-- Short natural replies ("no", "ok", "yes", "thanks") always pass through
+---
 
-**Output guard** (runs after the LLM):
-- Replaces empty LLM responses with a friendly retry prompt
-- Redacts API key patterns, tracebacks, and raw JSON blobs before they reach the user
+## Key Components
 
-### Key Design Decisions
-
-**All tools on root_agent, no sub-agents.** ADK sub-agent delegation ends the turn after the sub-agent responds — the pipeline would stall after qualification and never continue to matching. Flattening all tools onto `root_agent` lets the full flow run in one continuous turn driven by the LLM's tool-calling.
-
-**Pinecone with in-memory fallback.** Properties are upserted as vectors (multilingual-e5-large via Pinecone integrated inference) on first cold start. Semantic search ranks by natural language query; metadata filters enforce hard budget and bedroom constraints. When `PINECONE_API_KEY` is unset, the code falls back to an exact in-memory filter — local dev and CI work without a Pinecone account.
-
-**Secret Manager for all secrets.** Gemini key, JWT secret, SendGrid key, Pinecone key, and the Google Calendar service account JSON all live in Secret Manager, injected into Cloud Run via `secretKeyRef`. They never appear in source, CI logs, or plain env vars.
-
-**Terraform remote state on GCS.** State stored at `gs://gen-lang-client-0300667287-tfstate/letting-copilot/dev`. State lock prevents concurrent applies from corrupting infrastructure — two simultaneous CI runs will fail gracefully rather than corrupt state.
+| Component | What it does |
+|-----------|-------------|
+| **Ava (orchestrator)** | The AI agent. Runs the full pipeline in one turn using Gemini Flash |
+| **Pinecone** | Semantic vector search for properties. Budget/bedroom filters are exact; natural language query ranks results by relevance |
+| **Google Calendar** | Checks real freebusy availability and creates calendar events on booking |
+| **SendGrid** | Sends HTML confirmation emails after booking. Falls back to log-only if not configured |
+| **Google OAuth** | Sign-in via Google. Issues a short-lived JWT for all API calls |
+| **Input guardrails** | Blocks prompt injection, gibberish, off-topic queries before they reach the LLM |
+| **Output guardrails** | Redacts API keys or tracebacks that leak into LLM responses |
+| **LangGraph** | Alternative pipeline endpoint (`/workflow`) using a typed state machine |
+| **Terraform** | Manages all GCP infrastructure. State stored remotely in GCS — never local |
+| **GitHub Actions** | CI/CD: test → build (Docker layer cache) → deploy on every push to `main` |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| AI Agent | Google ADK 2.2.0 + Gemini Flash (free tier) |
-| API | FastAPI + Uvicorn |
-| Pipeline | LangGraph StateGraph (qualify → match → book) |
-| Vector Search | Pinecone (integrated inference, multilingual-e5-large) |
-| Calendar | Google Calendar API (service account, freebusy + event create) |
-| Email | SendGrid REST API (HTML + text, graceful fallback) |
-| Auth | Google OAuth 2.0 → short-lived JWT (PyJWT HS256) |
-| A2A | Google A2A protocol (agent-to-agent JSON-RPC) |
-| Guardrails | Input (injection, gibberish, off-topic) + output (secret leak, traceback) |
-| Container | Docker — `python:3.12-slim` |
-| Hosting | GCP Cloud Run (serverless, 0–3 instances, 512Mi) |
-| IaC | Terraform 1.6 (GCS remote state) |
-| CI/CD | GitHub Actions — test → build (BuildKit cache) → deploy |
-| Registry | GCP Artifact Registry |
-| Secrets | GCP Secret Manager (`secretKeyRef`) |
+```
+AI          Google ADK 2.2 + Gemini Flash (free tier)
+API         FastAPI + Uvicorn
+Search      Pinecone (integrated inference, no local embeddings)
+Calendar    Google Calendar API (service account)
+Email       SendGrid REST API
+Auth        Google OAuth 2.0 → JWT (PyJWT HS256)
+Pipeline    LangGraph StateGraph
+Hosting     GCP Cloud Run (scales to 0, max 3 instances)
+IaC         Terraform 1.6 (GCS remote state)
+CI/CD       GitHub Actions
+Secrets     GCP Secret Manager (secretKeyRef — never plain env vars)
+```
 
 ---
 
-## Project Structure
+## Project Layout
 
 ```
 LettingCopilot/
 ├── letting_copilot/
-│   ├── agents/
-│   │   └── orchestrator.py       # root_agent — all tools, full pipeline instruction
-│   ├── auth/
-│   │   └── jwt_handler.py        # Google OAuth verify + JWT issue/verify
-│   ├── guardrails/
-│   │   ├── input_guard.py        # blocks injection/gibberish/off-topic
-│   │   └── output_guard.py       # redacts secrets/tracebacks, empty fallback
+│   ├── agents/orchestrator.py    ← Ava — all tools, full pipeline
 │   ├── tools/
-│   │   ├── property_store.py     # Pinecone search + in-memory fallback
-│   │   ├── calendar_tool.py      # Google Calendar freebusy + event create
-│   │   ├── notification_tool.py  # SendGrid email (reminder + followup)
-│   │   └── crm_tool.py           # in-memory applicant + offer store
-│   ├── workflow/
-│   │   └── graph.py              # LangGraph StateGraph pipeline
-│   ├── a2a/                      # A2A agent card + JSON-RPC router
-│   ├── config.py                 # env-driven config (model, keys)
-│   └── app.py                    # FastAPI app, ADK runner, all endpoints
-├── data/
-│   └── properties.json           # seed listings — feeds Pinecone on startup
-├── ui/
-│   └── index.html                # single-page chat UI (Google Sign-In + chat)
-├── terraform/
-│   └── dev/
-│       ├── main.tf               # Cloud Run, Secret Manager, IAM
-│       └── variables.tf
-├── tests/
-│   ├── test_tools.py             # 18 unit tests — no GCP calls
-│   └── test_guardrails.py        # 28 guardrail tests
-├── .github/workflows/
-│   └── deploy-dev.yml            # test → build (BuildKit cache) → terraform deploy
-├── Dockerfile                    # python:3.12-slim, layered for cache
-├── requirements.txt
-└── VERSION                       # semver — image tagged v<semver>-<sha8>
+│   │   ├── property_store.py     ← Pinecone search + in-memory fallback
+│   │   ├── calendar_tool.py      ← real slots + booking
+│   │   ├── notification_tool.py  ← SendGrid emails
+│   │   └── crm_tool.py           ← applicant + offer records
+│   ├── guardrails/
+│   │   ├── input_guard.py        ← blocks bad input before LLM
+│   │   └── output_guard.py       ← cleans LLM response before user sees it
+│   ├── auth/jwt_handler.py       ← Google OAuth verify + JWT issue
+│   ├── workflow/graph.py         ← LangGraph pipeline (alt endpoint)
+│   └── app.py                    ← FastAPI + ADK runner + all routes
+├── data/properties.json          ← seed listings (feeds Pinecone on startup)
+├── ui/index.html                 ← single-page chat UI
+├── terraform/dev/                ← Cloud Run + Secret Manager + IAM
+├── tests/                        ← 46 unit tests, no GCP calls needed
+├── .github/workflows/deploy-dev.yml
+├── Dockerfile
+└── VERSION                       ← semver, image tagged v<semver>-<sha8>
 ```
 
 ---
 
-## CI/CD Pipeline
+## Running Locally
 
-Every push to `main`:
+```bash
+git clone https://github.com/anoopkum/LettingCopilot.git
+cd LettingCopilot
+pip install -r requirements.txt
 
-```
-git push → main
-    │
-    ▼
-Job 1: Unit Tests
-    pytest test_tools.py + test_guardrails.py (46 tests, no GCP calls)
-    │
-    ▼ pass
-Job 2: Build & Push
-    Compute tag: v<semver>-<sha8>  (e.g. v0.1.0-a1b2c3d4)
-    docker buildx build --cache-from type=gha --cache-to type=gha,mode=max
-    Push all tags: v0.1.0-<sha8> · v0.1.0 · sha-<sha8> · latest
-    │
-    ▼ pass
-Job 3: Terraform Deploy
-    terraform init  (GCS remote backend)
-    terraform apply -var image_tag=v0.1.0-<sha8>
-    smoke test: curl /health → assert status=ok
+export GOOGLE_API_KEY=your_gemini_key
+python main.py
+# → http://localhost:8080
 ```
 
-**Build caching:** Docker BuildKit stores layers in GitHub Actions cache. If `requirements.txt` is unchanged the pip install layer is a cache hit — build time drops from ~3 min to ~30s.
+Pinecone, SendGrid, and Google Calendar are all optional. Without their keys, Ava uses in-memory property search, mock calendar slots, and logs emails instead of sending them. Everything still works end-to-end.
 
-**Secrets flow:** GitHub Secrets → `TF_VAR_*` env vars → Terraform → Secret Manager → Cloud Run `secretKeyRef`
-
----
-
-## API Endpoints
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/health` | Public | Status, version, active features |
-| `GET` | `/auth/config` | Public | OAuth mode + client ID for UI |
-| `POST` | `/auth/google` | Public | Exchange Google id_token for JWT |
-| `POST` | `/auth/token` | Public | Dev JWT (disabled when OAuth enabled) |
-| `POST` | `/chat` | JWT | ADK orchestrator — main agent endpoint |
-| `POST` | `/workflow` | JWT | LangGraph pipeline endpoint |
-| `GET` | `/properties` | JWT | List all seed properties |
-| `GET` | `/.well-known/agent.json` | Public | A2A agent card |
-| `POST` | `/a2a` | JWT | A2A JSON-RPC (tasks/send, tasks/get, tasks/cancel) |
+```bash
+pytest tests/ -v   # 46 tests, no GCP account needed
+```
 
 ---
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GOOGLE_API_KEY` | Yes | Gemini API key (AI Studio) |
-| `JWT_SECRET` | Yes | HS256 signing secret (min 32 chars) |
-| `PINECONE_API_KEY` | No | Enables Pinecone vector search (falls back to in-memory) |
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `GOOGLE_API_KEY` | Yes | Gemini API key |
+| `JWT_SECRET` | Yes | JWT signing secret |
+| `PINECONE_API_KEY` | No | Vector property search (falls back to in-memory) |
 | `PINECONE_INDEX` | No | Index name (default: `lettingcopilot-properties`) |
-| `GOOGLE_CALENDAR_ID` | No | Calendar ID for real slot availability |
-| `GOOGLE_CALENDAR_SA_JSON` | No | Service account JSON for Calendar API |
-| `GOOGLE_OAUTH_CLIENT_ID` | No | Enables Google Sign-In (falls back to dev JWT) |
-| `SENDGRID_API_KEY` | No | Enables real email confirmations (falls back to log-only) |
+| `GOOGLE_OAUTH_CLIENT_ID` | No | Google Sign-In (falls back to dev JWT) |
+| `GOOGLE_CALENDAR_ID` | No | Real calendar slots (falls back to mock) |
+| `GOOGLE_CALENDAR_SA_JSON` | No | Service account for Calendar API |
+| `SENDGRID_API_KEY` | No | Real emails (falls back to log-only) |
 | `SENDGRID_FROM_EMAIL` | No | Verified sender address in SendGrid |
 
 ---
 
-## GitHub Actions Secrets
+## CI/CD
 
-| Secret | Description |
-|--------|-------------|
-| `GCP_SA_KEY` | Service account JSON for CI (Artifact Registry + Cloud Run + Terraform) |
-| `GOOGLE_API_KEY` | Gemini key — used in unit tests |
-| `GEMINI_API_KEY` | Gemini key — stored in Secret Manager via Terraform |
-| `JWT_SECRET` | JWT signing secret — stored in Secret Manager |
-| `GOOGLE_CALENDAR_SA_JSON` | Calendar service account JSON |
-| `GOOGLE_CALENDAR_ID` | Calendar ID (e.g. `user@gmail.com`) |
-| `GOOGLE_OAUTH_CLIENT_ID` | OAuth client ID |
-| `SENDGRID_API_KEY` | SendGrid key |
-| `SENDGRID_FROM_EMAIL` | Verified sender address |
-| `PINECONE_API_KEY` | Pinecone key |
-| `PINECONE_INDEX` | Pinecone index name |
-
----
-
-## Local Development
-
-```bash
-git clone https://github.com/anoopkum/LettingCopilot.git
-cd LettingCopilot
-
-pip install -r requirements.txt -r requirements-dev.txt
-
-# Minimum config — only Gemini key needed to run locally
-export GOOGLE_API_KEY=your_key_here
-
-python main.py
-# → http://localhost:8080
+```
+push to main
+    │
+    ├─ 1. Test       pytest (46 tests)
+    ├─ 2. Build      docker buildx + GitHub Actions layer cache
+    │                tagged: v0.1.0-<sha8>  (pinned, never :latest on Cloud Run)
+    └─ 3. Deploy     terraform apply → Cloud Run → smoke test /health
 ```
 
-Pinecone, SendGrid, and Google Calendar are all optional locally. Without their keys the agent uses in-memory property search, mock calendar slots, and log-only email notifications.
-
-```bash
-# Run tests (no GCP calls needed)
-pytest tests/ -v
-```
-
----
-
-## GCP Resources
-
-| Resource | Name |
-|----------|------|
-| Project | `gen-lang-client-0300667287` |
-| Region | `us-central1` |
-| Cloud Run service | `letting-copilot` |
-| Artifact Registry repo | `letting-copilot` |
-| Service Account | `lettingcopilot-runner` |
-| TF State Bucket | `gen-lang-client-0300667287-tfstate` |
-| Calendar SA | `lettingcopilot-calendar@gen-lang-client-0300667287.iam.gserviceaccount.com` |
+Secrets never touch the shell. They flow: **GitHub Secrets → `TF_VAR_*` env → Terraform → Secret Manager → Cloud Run `secretKeyRef`**.
 
 ---
 
 ## Links
 
 - **Live app:** https://letting-copilot-913660829167.us-central1.run.app
-- **GitHub:** https://github.com/anoopkum/LettingCopilot
-- **CI pipeline:** https://github.com/anoopkum/LettingCopilot/actions
+- **CI runs:** https://github.com/anoopkum/LettingCopilot/actions
 - **Troubleshooting:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
