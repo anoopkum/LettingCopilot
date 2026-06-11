@@ -141,6 +141,7 @@ async def health():
     features.append("google-oauth" if is_oauth_enabled() else "jwt-dev")
     features.append("google-calendar" if os.getenv("GOOGLE_CALENDAR_ID") else "calendar-mock")
     features.append("sendgrid-email" if os.getenv("SENDGRID_API_KEY") else "email-log-only")
+    features.append("pinecone-search" if os.getenv("PINECONE_API_KEY") else "property-inmemory")
     return {
         "status": "ok",
         "version": "0.1.0",

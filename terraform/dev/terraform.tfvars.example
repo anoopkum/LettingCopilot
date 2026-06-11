@@ -14,3 +14,7 @@ google_oauth_client_id  = ""       # e.g. "123456789-abc.apps.googleusercontent.
 # Optional — leave empty to log-only (no real emails sent)
 sendgrid_api_key        = ""       # from app.sendgrid.com → Settings → API Keys
 sendgrid_from_email     = ""       # e.g. "ava@yourdomain.com" — must be verified in SendGrid
+
+# Optional — leave empty to use in-memory property search fallback
+pinecone_api_key        = ""       # from app.pinecone.io → API Keys
+pinecone_index          = "lettingcopilot-properties"  # index name (auto-created if not exists)

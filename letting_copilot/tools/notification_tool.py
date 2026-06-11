@@ -11,23 +11,29 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_SENDGRID_API_KEY  = os.getenv("SENDGRID_API_KEY", "")
-_FROM_EMAIL        = os.getenv("SENDGRID_FROM_EMAIL", "noreply@lettingcopilot.ai")
-_FROM_NAME         = "LettingCopilot"
+_FROM_NAME = "LettingCopilot"
+
+# Read at call time (not module-load) so Secret Manager env vars are always current
+def _api_key() -> str:
+    key = os.getenv("SENDGRID_API_KEY", "")
+    return "" if key in ("", "not-configured") else key
+
+def _from_email() -> str:
+    return os.getenv("SENDGRID_FROM_EMAIL", "noreply@lettingcopilot.ai")
 
 
-def _send_email(to_email: str, subject: str, body_text: str, body_html: str) -> bool:
-    """Send via SendGrid; return True on success, False on failure."""
-    if not _SENDGRID_API_KEY:
-        logger.info("[notification] SendGrid not configured — logging only")
-        logger.info("[notification] TO=%s SUBJECT=%s", to_email, subject)
-        return False
+def _send_email(to_email: str, subject: str, body_text: str, body_html: str) -> tuple[bool, str]:
+    """Send via SendGrid. Returns (success, error_detail)."""
+    key = _api_key()
+    if not key:
+        logger.info("[notification] SendGrid not configured — logging only TO=%s", to_email)
+        return False, "SendGrid not configured"
 
     try:
         import httpx
         payload = {
             "personalizations": [{"to": [{"email": to_email}]}],
-            "from": {"email": _FROM_EMAIL, "name": _FROM_NAME},
+            "from": {"email": _from_email(), "name": _FROM_NAME},
             "subject": subject,
             "content": [
                 {"type": "text/plain", "value": body_text},
@@ -37,7 +43,7 @@ def _send_email(to_email: str, subject: str, body_text: str, body_html: str) -> 
         resp = httpx.post(
             "https://api.sendgrid.com/v3/mail/send",
             headers={
-                "Authorization": f"Bearer {_SENDGRID_API_KEY}",
+                "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -45,13 +51,14 @@ def _send_email(to_email: str, subject: str, body_text: str, body_html: str) -> 
         )
         if resp.status_code in (200, 202):
             logger.info("[notification] email sent to=%s subject=%s", to_email, subject)
-            return True
+            return True, ""
         else:
-            logger.error("[notification] SendGrid error %s: %s", resp.status_code, resp.text[:200])
-            return False
+            detail = resp.text[:300]
+            logger.error("[notification] SendGrid %s: %s", resp.status_code, detail)
+            return False, f"SendGrid {resp.status_code}: {detail}"
     except Exception as e:
         logger.error("[notification] email send failed: %s", e)
-        return False
+        return False, str(e)
 
 
 def send_reminder(
@@ -98,18 +105,23 @@ def send_reminder(
 
     sent = False
     channel = "log"
+    error = ""
     if applicant_email:
-        sent = _send_email(applicant_email, subject, body_text, body_html)
+        sent, error = _send_email(applicant_email, subject, body_text, body_html)
         channel = "sendgrid" if sent else "log"
     else:
         logger.warning("[notification] no email address for applicant %s — log only", applicant_name)
+        error = "no email address provided"
 
-    return {
+    result: dict[str, Any] = {
         "sent": sent,
         "channel": channel,
         "message": msg,
         "to": applicant_email or "(no email)",
     }
+    if error:
+        result["error"] = error
+    return result
 
 
 def send_followup(
@@ -147,13 +159,19 @@ def send_followup(
 
     sent = False
     channel = "log"
+    error = ""
     if applicant_email:
-        sent = _send_email(applicant_email, subject, body_text, body_html)
+        sent, error = _send_email(applicant_email, subject, body_text, body_html)
         channel = "sendgrid" if sent else "log"
+    else:
+        error = "no email address provided"
 
-    return {
+    result: dict[str, Any] = {
         "sent": sent,
         "channel": channel,
         "message": msg,
         "to": applicant_email or "(no email)",
     }
+    if error:
+        result["error"] = error
+    return result

@@ -76,8 +76,9 @@ def check_input(text: str, agent_name: str = "") -> GuardrailResult:
                        "For example: 'I'm looking for a 2-bed flat in London around £1,400/month.'",
         )
 
-    # 2. Too short to be meaningful (single char, just punctuation)
-    if len(stripped) < 3 or re.fullmatch(r"[^a-zA-Z0-9]+", stripped):
+    # 2. Too short to be meaningful — single char or pure punctuation only.
+    # Short natural replies (no, ok, yes, thanks, hi) must pass through to the LLM.
+    if re.fullmatch(r"[^a-zA-Z0-9]+", stripped) or (len(stripped) == 1 and not stripped.isalpha()):
         return GuardrailResult(
             blocked=True,
             reason="too_short_or_gibberish",

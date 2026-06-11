@@ -135,6 +135,8 @@ jobs:
           TF_VAR_google_oauth_client_id:   ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           TF_VAR_sendgrid_api_key:         ${{ secrets.SENDGRID_API_KEY }}
           TF_VAR_sendgrid_from_email:      ${{ secrets.SENDGRID_FROM_EMAIL }}
+          TF_VAR_pinecone_api_key:         ${{ secrets.PINECONE_API_KEY }}
+          TF_VAR_pinecone_index:           ${{ secrets.PINECONE_INDEX }}
         run: |
           # Deploy the pinned semver+sha tag — never deploy :latest to Cloud Run
           terraform apply -auto-approve -input=false \

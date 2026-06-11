@@ -62,6 +62,19 @@ resource "google_secret_manager_secret_version" "sendgrid_api_key" {
   secret_data = var.sendgrid_api_key != "" ? var.sendgrid_api_key : "not-configured"
 }
 
+# ── Secret Manager: Pinecone API key ─────────────────────────────────────────
+resource "google_secret_manager_secret" "pinecone_api_key" {
+  secret_id = "pinecone-api-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "pinecone_api_key" {
+  secret      = google_secret_manager_secret.pinecone_api_key.id
+  secret_data = var.pinecone_api_key != "" ? var.pinecone_api_key : "not-configured"
+}
+
 # ── Secret Manager: Google Calendar service account JSON ─────────────────────
 # Always created; stores "{}" placeholder when calendar not configured.
 # Python checks for required SA key fields and falls back to mock if not present.
@@ -186,6 +199,21 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
         value = var.sendgrid_from_email
       }
 
+      # Pinecone vector property search
+      env {
+        name = "PINECONE_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.pinecone_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "PINECONE_INDEX"
+        value = var.pinecone_index
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -225,6 +253,7 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
     google_secret_manager_secret_version.jwt_secret,
     google_secret_manager_secret_version.calendar_sa_json,
     google_secret_manager_secret_version.sendgrid_api_key,
+    google_secret_manager_secret_version.pinecone_api_key,
   ]
 }
 

@@ -17,13 +17,19 @@ class TestInputGuardrail:
         assert r.reason == "empty_input"
 
     def test_single_char_blocked(self):
-        r = check_input("x")
+        r = check_input("!")
         assert r.blocked
         assert r.reason == "too_short_or_gibberish"
 
     def test_symbols_only_blocked(self):
         r = check_input("!!!")
         assert r.blocked
+
+    def test_short_conversational_replies_allowed(self):
+        # "no", "yes", "ok", "thanks" are valid mid-conversation replies — must NOT be blocked
+        for word in ["no", "yes", "ok", "hi", "sure", "thanks", "no thanks"]:
+            r = check_input(word)
+            assert not r.blocked, f"'{word}' was wrongly blocked: {r.reason}"
 
     def test_gibberish_high_symbols_blocked(self):
         r = check_input("@#$% ^^& *()_ !!! ???")

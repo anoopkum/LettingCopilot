@@ -11,4 +11,5 @@ PyJWT>=2.8.0
 google-api-python-client>=2.0.0
 google-auth>=2.0.0
 google-auth-httplib2>=0.2.0
+pinecone>=3.0.0
 # SendGrid — email notifications (httpx used directly, no extra SDK needed)

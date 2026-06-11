@@ -27,6 +27,15 @@ class TestPropertyStore:
     def test_get_property_missing(self):
         assert get_property("nonexistent") is None
 
+    def test_search_with_semantic_query_fallback(self):
+        # Pinecone not configured in CI → falls back to in-memory, query param is silently ignored
+        results = search_properties(max_rent=3000, query="quiet flat near tube")
+        assert isinstance(results, list)
+
+    def test_search_no_results(self):
+        results = search_properties(max_rent=100)  # too low — no matches
+        assert results == []
+
 
 class TestCalendar:
     def test_get_available_slots_structure(self):

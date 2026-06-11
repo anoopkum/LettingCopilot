@@ -62,3 +62,17 @@ variable "sendgrid_from_email" {
   sensitive   = false
   default     = ""
 }
+
+variable "pinecone_api_key" {
+  description = "Pinecone API key — stored in Secret Manager for vector property search"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "pinecone_index" {
+  description = "Pinecone index name for property vectors"
+  type        = string
+  sensitive   = false
+  default     = "lettingcopilot-properties"
+}
