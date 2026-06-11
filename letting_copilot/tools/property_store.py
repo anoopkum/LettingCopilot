@@ -99,7 +99,7 @@ def _seed_pinecone(index) -> None:
                 f"Available from {p.get('available_from', 'now')}."
             )
             records.append({
-                "id":       p["id"],
+                "_id":      p["id"],   # SDK requires _id (not id) for upsert_records
                 "text":     text,
                 # Metadata for exact filters
                 "area":         p["area"].lower(),
@@ -179,21 +179,24 @@ def _pinecone_search(
 
     results = index.search(
         namespace="properties",
-        query={"inputs": {"text": search_text}, "top_k": 5},
+        top_k=5,
+        inputs={"text": search_text},
         filter=filters,
-        include_metadata=True,
     )
 
-    hits = results.get("result", {}).get("hits", [])
+    # SDK returns SearchRecordsResponse with results.result.hits (object, not dict)
+    hits = results.result.hits if hasattr(results, "result") else []
     logger.info("[pinecone] search returned %d hits for '%s'", len(hits), search_text[:60])
 
     # Hydrate full property records from in-memory store (contains all fields)
     _load()
     found = []
     for hit in hits:
-        prop = next((p for p in _PROPERTIES if p["id"] == hit["id"]), None)
+        hit_id = hit.id if hasattr(hit, "id") else hit.get("id") or hit.get("_id")
+        prop = next((p for p in _PROPERTIES if p["id"] == hit_id), None)
         if prop:
-            found.append({**prop, "_score": round(hit.get("_score", 0), 3)})
+            score = hit.score if hasattr(hit, "score") else hit.get("_score", 0)
+            found.append({**prop, "_score": round(score, 3)})
 
     return found
 
