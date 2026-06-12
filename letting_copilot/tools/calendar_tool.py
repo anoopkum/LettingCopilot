@@ -12,6 +12,9 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+_TZ = ZoneInfo("Europe/London")
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -69,7 +72,7 @@ def _get_service():
 # Slots use human-readable datetime strings as IDs so the LLM can pass them back
 # after presenting them to the user (e.g. "Thursday 11 June at 9am").
 def _build_fake_slots() -> list[dict]:
-    base = datetime.now(timezone.utc).replace(
+    base = datetime.now(_TZ).replace(
         hour=0, minute=0, second=0, microsecond=0
     ) + timedelta(days=1)
     slots = []
@@ -142,7 +145,7 @@ def _gcal_free_slots(svc, date_hint: str | None) -> list[dict[str, Any]]:
     Query freebusy for the next _DAYS_AHEAD days and return free slots
     at the candidate hours (_SLOT_HOURS) that don't overlap any existing event.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(_TZ)
     end = now + timedelta(days=_DAYS_AHEAD)
 
     body = {
@@ -160,9 +163,9 @@ def _gcal_free_slots(svc, date_hint: str | None) -> list[dict[str, Any]]:
 
     slots = []
     day = now.date()
-    while len(slots) < 4 and (datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) - now).days < _DAYS_AHEAD:
+    while len(slots) < 4 and (datetime.combine(day, datetime.min.time(), tzinfo=_TZ) - now).days < _DAYS_AHEAD:
         for hour in _SLOT_HOURS:
-            slot_start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc).replace(hour=hour)
+            slot_start = datetime.combine(day, datetime.min.time(), tzinfo=_TZ).replace(hour=hour)
             slot_end   = slot_start + timedelta(minutes=_SLOT_DURATION)
 
             if slot_start < now:
