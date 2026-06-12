@@ -199,7 +199,7 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
         value = var.sendgrid_from_email
       }
 
-      # Pinecone vector property search
+      # Pinecone — property search index
       env {
         name = "PINECONE_API_KEY"
         value_source {
@@ -212,6 +212,11 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
       env {
         name  = "PINECONE_INDEX"
         value = var.pinecone_index
+      }
+      # Pinecone — applicant CRM index
+      env {
+        name  = "PINECONE_APPLICANTS_INDEX"
+        value = var.pinecone_applicants_index
       }
 
       resources {

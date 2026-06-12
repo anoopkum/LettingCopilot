@@ -76,3 +76,10 @@ variable "pinecone_index" {
   sensitive   = false
   default     = "lettingcopilot-properties"
 }
+
+variable "pinecone_applicants_index" {
+  description = "Pinecone index name for applicant CRM records"
+  type        = string
+  sensitive   = false
+  default     = "applicants"
+}
