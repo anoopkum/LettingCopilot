@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "homedata": {
+      "command": "npx",
+      "args": ["-y", "@homedata/mcp-server"],
+      "env": {
+        "HOMEDATA_API_KEY": "wt_M0cjyWvVrSyFFPK6yFwVeN9OGSuX9D9Hnn1iMP09HqZqdYTd"
+      }
+    }
+  }
+}

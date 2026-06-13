@@ -140,6 +140,7 @@ jobs:
           TF_VAR_pinecone_api_key:         ${{ secrets.PINECONE_API_KEY }}
           TF_VAR_pinecone_index:           ${{ secrets.PINECONE_INDEX }}
           TF_VAR_pinecone_applicants_index: ${{ secrets.PINECONE_APPLICANTS_INDEX }}
+          TF_VAR_homedata_api_key:         ${{ secrets.HOMEDATA_API_KEY }}
         run: |
           # Deploy the pinned semver+sha tag — never deploy :latest to Cloud Run
           terraform apply -auto-approve -input=false \
