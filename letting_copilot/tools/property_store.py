@@ -6,10 +6,6 @@ Vectors are upserted on first use from data/properties.json.
 Semantic search uses Pinecone's built-in inference (multilingual-e5-large).
 Exact filters (budget, bedrooms) are applied as Pinecone metadata filters.
 
-HomeData enrichment: set HOMEDATA_API_KEY to enrich results with EPC rating,
-floor area, construction age, and sold price history. When a postcode is supplied,
-HomeData is also queried as a live data source alongside the seed listings.
-
 Fallback: plain in-memory filter when Pinecone is not configured.
 """
 from __future__ import annotations
@@ -19,13 +15,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from letting_copilot.tools.homedata_tool import enrich_property
-
 logger = logging.getLogger(__name__)
 
 _PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
 _PINECONE_INDEX   = os.getenv("PINECONE_INDEX", "lettingcopilot-properties")
-_HOMEDATA_ENABLED = bool(os.getenv("HOMEDATA_API_KEY", ""))
 
 # In-memory store — always loaded as fallback
 _PROPERTIES: list[dict] = []
@@ -55,11 +48,10 @@ def _get_pinecone_index():
     if not _PINECONE_API_KEY:
         return None
     try:
-        from pinecone import Pinecone, ServerlessSpec
+        from pinecone import Pinecone
 
         pc = Pinecone(api_key=_PINECONE_API_KEY)
 
-        # Create index if it doesn't exist (integrated inference — no embedding model needed locally)
         existing = [idx.name for idx in pc.list_indexes()]
         if _PINECONE_INDEX not in existing:
             logger.info("[pinecone] creating index '%s'", _PINECONE_INDEX)
@@ -97,7 +89,6 @@ def _seed_pinecone(index) -> None:
     try:
         records = []
         for p in _PROPERTIES:
-            # Text field is what Pinecone embeds for semantic search
             text = (
                 f"{p['bedrooms']}-bedroom {p.get('description', '')} "
                 f"in {p['area']}. "
@@ -106,14 +97,13 @@ def _seed_pinecone(index) -> None:
                 f"Available from {p.get('available_from', 'now')}."
             )
             records.append({
-                "_id":      p["id"],   # SDK requires _id (not id) for upsert_records
-                "text":     text,
-                # Metadata for exact filters
-                "area":         p["area"].lower(),
-                "bedrooms":     p["bedrooms"],
-                "rent_pcm":     p["rent_pcm"],
+                "_id":            p["id"],
+                "text":           text,
+                "area":           p["area"].lower(),
+                "bedrooms":       p["bedrooms"],
+                "rent_pcm":       p["rent_pcm"],
                 "available_from": p.get("available_from", ""),
-                "address":      p["address"],
+                "address":        p["address"],
             })
 
         index.upsert_records(namespace="properties", records=records)
@@ -138,34 +128,21 @@ def search_properties(
     query like "quiet flat near tube for young professional" to get best matches.
     Falls back to in-memory exact filter when Pinecone is not configured.
 
-    When HOMEDATA_API_KEY is set, each result is enriched with a UPRN
-    (unique UK property identifier) resolved via HomeData address lookup.
-    The UPRN enables future lookups for EPC, floor area, and sold history
-    as the HomeData plan is upgraded.
-
     Args:
         max_rent:  maximum monthly rent (required)
         bedrooms:  exact bedroom count filter (optional)
         area:      area name filter (optional)
         query:     natural language description (optional, used for semantic search)
-        postcode:  postcode hint passed into semantic query (optional)
     """
     index = _get_pinecone_index()
 
     if index is not None:
         try:
-            results = _pinecone_search(index, max_rent, bedrooms, area, query)
+            return _pinecone_search(index, max_rent, bedrooms, area, query)
         except Exception as e:
             logger.error("[pinecone] search failed: %s — falling back", e)
-            results = _memory_search(max_rent, bedrooms, area)
-    else:
-        results = _memory_search(max_rent, bedrooms, area)
 
-    # Resolve UPRNs via HomeData address lookup
-    if _HOMEDATA_ENABLED:
-        results = [enrich_property(p) for p in results]
-
-    return results
+    return _memory_search(max_rent, bedrooms, area)
 
 
 def get_property(property_id: str) -> dict[str, Any] | None:
@@ -184,14 +161,12 @@ def _pinecone_search(
     query: str | None,
 ) -> list[dict[str, Any]]:
     """Query Pinecone with metadata filters + semantic ranking."""
-    # Build metadata filter
     filters: dict[str, Any] = {"rent_pcm": {"$lte": max_rent}}
     if bedrooms:
         filters["bedrooms"] = {"$eq": bedrooms}
     if area:
         filters["area"] = {"$eq": area.lower()}
 
-    # Use query for semantic search, or a generic text if not provided
     search_text = query or f"{bedrooms or 'any'} bedroom flat under £{max_rent}/month"
     if area:
         search_text += f" in {area}"
@@ -203,11 +178,9 @@ def _pinecone_search(
         filter=filters,
     )
 
-    # SDK returns SearchRecordsResponse with results.result.hits (object, not dict)
     hits = results.result.hits if hasattr(results, "result") else []
     logger.info("[pinecone] search returned %d hits for '%s'", len(hits), search_text[:60])
 
-    # Hydrate full property records from in-memory store (contains all fields)
     _load()
     found = []
     for hit in hits:
@@ -239,5 +212,3 @@ def _memory_search(
         results.append(p)
     logger.info("[property_store] in-memory search returned %d results", len(results))
     return results[:5]
-
-

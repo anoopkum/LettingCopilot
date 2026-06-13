@@ -75,19 +75,6 @@ resource "google_secret_manager_secret_version" "pinecone_api_key" {
   secret_data = var.pinecone_api_key != "" ? var.pinecone_api_key : "not-configured"
 }
 
-# ── Secret Manager: HomeData API key ─────────────────────────────────────────
-resource "google_secret_manager_secret" "homedata_api_key" {
-  secret_id = "homedata-api-key"
-  replication {
-    auto {}
-  }
-}
-
-resource "google_secret_manager_secret_version" "homedata_api_key" {
-  secret      = google_secret_manager_secret.homedata_api_key.id
-  secret_data = var.homedata_api_key != "" ? var.homedata_api_key : "not-configured"
-}
-
 # ── Secret Manager: Google Calendar service account JSON ─────────────────────
 # Always created; stores "{}" placeholder when calendar not configured.
 # Python checks for required SA key fields and falls back to mock if not present.
@@ -232,17 +219,6 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
         value = var.pinecone_applicants_index
       }
 
-      # HomeData — UK property address lookup and UPRN resolution
-      env {
-        name = "HOMEDATA_API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.homedata_api_key.secret_id
-            version = "latest"
-          }
-        }
-      }
-
       resources {
         limits = {
           cpu    = "1"
@@ -283,7 +259,6 @@ resource "google_cloud_run_v2_service" "letting_copilot" {
     google_secret_manager_secret_version.calendar_sa_json,
     google_secret_manager_secret_version.sendgrid_api_key,
     google_secret_manager_secret_version.pinecone_api_key,
-    google_secret_manager_secret_version.homedata_api_key,
   ]
 }
 

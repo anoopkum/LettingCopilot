@@ -83,10 +83,3 @@ variable "pinecone_applicants_index" {
   sensitive   = false
   default     = "applicants"
 }
-
-variable "homedata_api_key" {
-  description = "HomeData API key — stored in Secret Manager for UK property address lookup"
-  type        = string
-  sensitive   = true
-  default     = ""
-}

@@ -53,5 +53,170 @@
     "available_from": "2026-06-30",
     "features": ["part-furnished", "quiet street"],
     "description": "Cosy 1-bed on a quiet residential street in Streatham."
+  },
+  {
+    "id": "prop_006",
+    "address": "14 Bold Street, Liverpool L1 4DS",
+    "area": "Liverpool",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "rent_pcm": 850,
+    "available_from": "2026-07-01",
+    "features": ["furnished", "city centre", "new build"],
+    "description": "Stylish 1-bed apartment in the heart of Liverpool city centre."
+  },
+  {
+    "id": "prop_007",
+    "address": "7 Lark Lane, Liverpool L17 8UU",
+    "area": "Liverpool",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 1100,
+    "available_from": "2026-07-15",
+    "features": ["part-furnished", "garden", "quiet street"],
+    "description": "Charming 2-bed terrace near Sefton Park and Lark Lane."
+  },
+  {
+    "id": "prop_008",
+    "address": "3 New Ferry Road, Wirral CH62 1AJ",
+    "area": "Wirral",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 900,
+    "available_from": "2026-06-25",
+    "features": ["unfurnished", "parking", "near station"],
+    "description": "Well-maintained 2-bed flat in New Ferry, Wirral, close to Mersey ferry links."
+  },
+  {
+    "id": "prop_009",
+    "address": "21 Marine Promenade, Wallasey, Wirral CH45 2PB",
+    "area": "Wirral",
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "rent_pcm": 1200,
+    "available_from": "2026-07-01",
+    "features": ["furnished", "sea views", "parking", "garden"],
+    "description": "Stunning 3-bed house with sea views across the Mersey estuary."
+  },
+  {
+    "id": "prop_010",
+    "address": "55 Deansgate, Manchester M3 2AY",
+    "area": "Manchester",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "rent_pcm": 1300,
+    "available_from": "2026-07-01",
+    "features": ["furnished", "city centre", "gym", "concierge"],
+    "description": "Sleek 1-bed apartment in a modern Deansgate tower with city views."
+  },
+  {
+    "id": "prop_011",
+    "address": "18 Beech Road, Chorlton, Manchester M21 9EG",
+    "area": "Manchester",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 1250,
+    "available_from": "2026-06-20",
+    "features": ["part-furnished", "garden", "quiet area", "near tram"],
+    "description": "Lovely 2-bed flat in popular Chorlton village, close to bars and parks."
+  },
+  {
+    "id": "prop_012",
+    "address": "9 Broad Street, Birmingham B1 2HF",
+    "area": "Birmingham",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "rent_pcm": 1050,
+    "available_from": "2026-07-15",
+    "features": ["furnished", "city centre", "balcony", "new build"],
+    "description": "Modern 1-bed with balcony in Birmingham city centre near Brindleyplace."
+  },
+  {
+    "id": "prop_013",
+    "address": "42 Moseley Road, Moseley, Birmingham B12 9AH",
+    "area": "Birmingham",
+    "bedrooms": 3,
+    "bathrooms": 1,
+    "rent_pcm": 1400,
+    "available_from": "2026-06-30",
+    "features": ["unfurnished", "large garden", "period features"],
+    "description": "Victorian 3-bed terrace in trendy Moseley with a large rear garden."
+  },
+  {
+    "id": "prop_014",
+    "address": "6 Park Row, Leeds LS1 5HD",
+    "area": "Leeds",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "rent_pcm": 1000,
+    "available_from": "2026-07-01",
+    "features": ["furnished", "city centre", "new build"],
+    "description": "Contemporary 1-bed apartment in Leeds city centre, walking distance from the station."
+  },
+  {
+    "id": "prop_015",
+    "address": "33 Headingley Lane, Headingley, Leeds LS6 1BL",
+    "area": "Leeds",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 1150,
+    "available_from": "2026-07-10",
+    "features": ["part-furnished", "near university", "garden"],
+    "description": "Spacious 2-bed in sought-after Headingley, ideal for professionals or postgrads."
+  },
+  {
+    "id": "prop_016",
+    "address": "11 Princes Street, Edinburgh EH2 2ER",
+    "area": "Edinburgh",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 1800,
+    "available_from": "2026-07-01",
+    "features": ["furnished", "city centre", "castle views"],
+    "description": "Beautiful 2-bed flat with views of Edinburgh Castle in the heart of the city."
+  },
+  {
+    "id": "prop_017",
+    "address": "5 Leith Walk, Edinburgh EH6 8LN",
+    "area": "Edinburgh",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "rent_pcm": 1200,
+    "available_from": "2026-06-25",
+    "features": ["furnished", "vibrant area", "near tram"],
+    "description": "Compact modern 1-bed on Leith Walk, great transport links and local restaurants."
+  },
+  {
+    "id": "prop_018",
+    "address": "24 Cathedral Road, Cardiff CF11 9LJ",
+    "area": "Cardiff",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 1100,
+    "available_from": "2026-07-01",
+    "features": ["part-furnished", "period features", "near city centre"],
+    "description": "Elegant 2-bed period flat on prestigious Cathedral Road, minutes from the city."
+  },
+  {
+    "id": "prop_019",
+    "address": "8 Elm Grove, Brighton BN2 3ES",
+    "area": "Brighton",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "rent_pcm": 1500,
+    "available_from": "2026-06-20",
+    "features": ["furnished", "near seafront", "bright"],
+    "description": "Sunny 1-bed flat a short walk from Brighton seafront and the Lanes."
+  },
+  {
+    "id": "prop_020",
+    "address": "17 Jesmond Road, Newcastle upon Tyne NE2 1LA",
+    "area": "Newcastle",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "rent_pcm": 950,
+    "available_from": "2026-07-01",
+    "features": ["part-furnished", "vibrant area", "near metro"],
+    "description": "Comfortable 2-bed flat in popular Jesmond, close to the metro and great nightlife."
   }
 ]
