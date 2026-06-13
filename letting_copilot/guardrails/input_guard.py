@@ -160,7 +160,7 @@ def _check_qualification_context(text: str) -> GuardrailResult | None:
     # Looks like a move date answer but is unrecognisable.
     # Do NOT fire if the message is a search/area query (contains "looking", "area", "in", city names etc.)
     date_keywords = re.search(r"\b(move|moving|start|from|available|date)\b", text, re.IGNORECASE)
-    location_context = re.search(r"\b(area|city|town|street|road|place|flat|house|looking|searching|want|need|find|near|in)\b", text, re.IGNORECASE)
+    location_context = re.search(r"\b(area|city|town|street|road|place|flat|house|looking|searching|near|in)\b", text, re.IGNORECASE)
     if date_keywords and not location_context and not _DATE_HINTS_RE.search(text) and not re.search(r"\d", text):
         return GuardrailResult(
             blocked=True,
